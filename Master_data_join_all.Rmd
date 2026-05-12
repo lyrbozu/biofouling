@@ -1,0 +1,647 @@
+
+
+End goal for this integrated dataset is to have all samples regardless of what's been measured. join_all
+
+
+#### **Script Preparation** 
+
+**Erasing past objects for clean runs** 
+```{r}
+rm(list=ls())
+
+```
+
+**Suppressing warnings**
+```{r}
+#Suppr
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE)
+```
+
+**Inputs**
+
+Rn this is a bit of a frankenstein's monster situation, I edited the count .csvs and wrote to file so they WILL NOT be of the same format as your standardised count (just an added date column)
+
+```{r}
+zooplankton <- read.csv("zooplankton_recounted_.csv") #Standardised zooplankton counts w/ an added date column. Will fix the code to be reproducible. 
+nutrients <- read.csv("nutrients_processed.csv") #nutrients data
+phytoplankton_seaweed <- read.csv("phytoplankton_transformed_.csv") #standardised phytoplankton counts. Also has dates
+phytodate <- read.csv("Phyto_seaweed_raw_data.csv") #raw phytoplankton data, used to steal date column
+zoodate <- read.csv("Zoo_seaweed_raw_data.csv") #raw zooplankton data, used to steal date column
+daily_air <- read.csv("all_farms_air_daily.csv") #air data
+daily_radiation <- read.csv("all_farms_radiation_daily.csv") #radiation dataset
+daily_water <- read.csv("all_farms_water_daily.csv") #daily water
+daily_light <- read.csv("all_farms_light_daily.csv") #daily light
+meta <- read.csv("metadata.csv") #meta data
+biofouling <- read.csv("biofouling data .csv") #biofouling data
+
+```
+
+**Loading required libraries**
+```{r}
+library(tidyverse)
+library(docstring)
+library(ggplot2)
+library(dplyr)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(readxl)
+library(ggrepel)
+library(here)
+library(rnaturalearthhires)
+library(patchwork)
+```
+
+
+
+
+#### **Data management**
+
+Zooplankton
+
+```{r}
+#Reformatting date to match climate dataset format
+zooplankton <- zooplankton %>%
+  rename(
+    Date = date_sampled
+  )
+
+zooplankton <- zooplankton %>%
+  mutate(Date = as.Date(Date, format = "%d_%m_%Y"))
+
+```
+
+
+**Biofouling**
+```{r}
+#n/a to NA  
+biofouling <- biofouling %>%
+  mutate(across(where(is.character), ~ na_if(., "n/a")))
+
+#Blank spaces to NA
+biofouling <- biofouling %>%
+  mutate(across(where(is.character), ~ na_if(., "")))
+
+biofouling <- biofouling %>%
+  rename(Date = date)
+
+biofouling <- biofouling %>%
+  mutate(Date = as.Date(Date, format = "%d/%m/%Y"))
+
+biofouling <- biofouling %>%
+  select(-c(2))
+
+biofouling <- biofouling %>%
+  rename(farm = farm_code)
+```
+
+
+Unfortunately need sample date to merge w/ climate data. 
+
+**Nutrient Dataset**
+
+This dataset includes salinity, NO2, No3, Po4, and chlorophyll.
+
+```{r}
+
+nutrients <- nutrients %>%
+  select(-c(7, 8, 9, 10))
+```
+
+**Phytoplankton Seaweed Dataset**
+
+This dataset comprises of phytoplankton counts, and includes a few redundant columns. I'm removing them prior to linking everything into a final set out of personal preference. (Working through each dataset one at a time, final version might edit final dataset itself.) Very easy to add columns back in if Sofie would rather include them.
+
+
+
+```{r}
+
+#Reformatting date to match climate dataset format
+phytoplankton_seaweed <- phytoplankton_seaweed %>%
+  mutate(Date = as.Date(Date))
+
+```
+
+**Radiation dataset**
+
+This dataset is full of NAs to the point that just removing them deletes the entire dataset. Includes measurements of shortwave, direct radiation, and diffuse radiation per farm, but also total radiation across all farms. 
+
+Is total radiation across all farms necessary? Maybe this has some sort of use for a seperate project, but knowing the total amount of radiation across several unassociated couldn't help discern drivers of biomass/fouling.
+
+No sample identifiers, so needs to be linked by date and farm.
+
+There's an all farms option included, but all farm options do not correspond to any specific sample. Safe to delete, but I'm going to ask Sofie. 
+
+For climate datasets we need to link by date and farm, but other datasets (the ones with identifiers), do not have dates. They do have years though. Need to create a year column, so we can integrate data by year and farm.
+
+**Integrating zooplankton, nutrient, and phyto**
+```{r}
+merge1 <- list(zooplankton, phytoplankton_seaweed) %>%
+  reduce(full_join, by = c("Identifier", "Date"))
+
+merge2 <- list(merge1, nutrients) %>%
+  reduce(full_join, by = ("Identifier"))
+
+merge2 <- merge2 %>%
+  relocate(Date, .after = 2)
+```
+
+
+
+**Light dataset**
+
+This dataset has daylight duration in hours, seconds, and days... and then hours again. The first hours column corresponds to individual farms, while the last three relate to daylight across all farms. Safe to delete them all. 
+
+
+```{r}
+#Removing extra data columns 
+daily_light2 <- daily_light %>%
+  select(-c(4, 5, 6))
+
+#Removing all NAs
+daily_light2 <- daily_light2 %>%
+  drop_na() #32300 entries
+
+#Removing all_farms
+daily_light2 <- daily_light2 %>%
+  filter(farm != "all_farms") #4300 entries
+
+#Formatting date column to let it merge by date 
+daily_light2 <- daily_light2 %>%
+  mutate(Date = as.Date(Date))
+
+
+```
+
+**Water Dataset**
+
+Does NOT have an all farms option. Just do away with all farm entries. 
+
+```{r}
+#Formatting date column to let it merge by date
+daily_water2 <- daily_water %>%
+  mutate(Date = as.Date(Date))
+```
+
+
+**Radiation Dataset**
+
+```{r}
+#Removing total columns
+daily_radiation2 <- daily_radiation %>%
+  select(-c(6, 7, 8))
+
+#Dropping all 'all_farms' farm entries
+daily_radiation2 <- daily_radiation2 %>%
+  filter(farm != "all_farms") #3700 samples
+
+#Formatting date column to let it merge by date
+daily_radiation2 <- daily_radiation2 %>%
+  mutate(Date = as.Date(Date))
+
+```
+
+**Air Dataset**
+
+No all farm entries
+
+```{r}
+
+#Formatting date column to let it merge by date
+daily_air2 <- daily_air %>%
+  mutate(Date = as.Date(Date))
+
+```
+
+**Merging Climate Data
+```{r}
+merge3 <- list(merge2, daily_air2, daily_light2, daily_radiation2, daily_water2) %>%
+  reduce(full_join, by = c("Date", "farm"))
+```
+
+
+
+**Metadata**
+```{r}
+
+
+#Removing some columns
+meta <- meta %>%
+  select(-c(3, 5, 6, 7))
+
+#Merging
+merge4 <- list(merge3, meta) %>%
+  reduce(full_join, by = ("Identifier"))
+
+#
+merge5 <- list(merge4, biofouling) %>%
+  reduce(full_join, by = c("farm", "Date"))
+```
+
+**Hydrozoan subset**
+```{r}
+#All hydrozoan species
+hydrozoans <- c(
+  "aglantha_digitale", "clytia_haemisphaerica", "clytia_gregaria",
+  "obelia", "eirene", "phialella", "mitrocomella_browmei",
+  "lizzia_blondina", "rathkea_octopunctata", "sarsia_tubulosa",
+  "stauridiosarsia_producta", "euphysa_aurata", "hybocodon",
+  "cosmetira_pilosella", "ectopleura", "ectopleura_sp",
+  "muggiaea_atlantica", "eudoxoides_spiralis",
+  "siphonophore", "actinula", "cerinula"
+)
+
+#hydrozoan only dataset
+hydro_df <- merge4 %>%
+  select(
+    Identifier:year,
+    all_of(hydrozoans),
+    Salinity:daylength_h)
+
+hydro_df <- hydro_df %>%
+  slice(-252:-4673)
+
+
+bryozoan <- merge4 %>%
+  select(Identifier:year,
+         cyphonaute, 
+         Salinity:daylength_h)
+
+bryozoan <- bryozoan %>%
+  slice(-252:-4673)
+
+```
+
+#### **Quality Check**
+
+**Quick Quality Checking Function**
+```{r}
+
+#data_check
+#not annotated w/ docstring yet
+#creates a subset from the complete merged data and then compares subset to original dataset
+data_check <- function(original, final, linked, col) {
+  subset <- final %>%
+    filter(!is.na(.data[[col]])) %>% #deletes any row with NA in the specified column - must use a column specific to desired dataset w/o NAs in it.
+    select(all_of(names(original))) #takes all the columns in the original dataset for me to compare to.
+  
+  #Using list() for now
+  #returns two results showing - 
+  list(
+    #shows the number of rows missing from the merged dataset, if any
+    missing_rows_number = anti_join(original, subset, by = linked),
+    
+    #shows the number of rows added to the merged dataset, if any.
+    extra_rows_number   = anti_join(subset, original, by = linked)
+  )
+}
+
+#Zooplankton
+data_check(zooplankton, merge4, c("Identifier", "Date"), "actinotroch") #none missing none added
+
+#Phytoplankton
+data_check(phytoplankton_seaweed, merge4, c("Identifier", "Date"), "Alexandrium_sp") #if samples show up with tons of NAs, then they aren't missing, they're just unmeasured and the function considers them missing. 
+
+#Nutrients
+data_check(nutrients, merge4, ("Identifier"), "Salinity") #none missing none added
+
+#Water
+data_check(daily_water2, merge4, c("Date", "farm"), "wave_height..m.") #none missing none added
+
+#Air
+data_check(daily_air2, merge4, c("Date", "farm"), "max_temp") #none missing none added
+
+#Radiation
+data_check(daily_radiation2, merge4, c("Date", "farm"), "diffuse_radiation..W.m..") #671 'missing' entries, 671 NAs in that column in the original dataset. Nothing missing nothing added.
+sum(is.na(daily_radiation2$diffuse_radiation..W.m..))
+
+#Light
+data_check(daily_light2, merge4, c("Date", "farm"), "daylight_duration..h.") #nothing missing nothing added
+
+#Metadata
+data_check(meta, merge4, ("Identifier"), "Location") #Nothing missing nothing added
+
+
+
+```
+
+```{r}
+
+```
+
+
+===================
+# Analysis 
+====================
+
+================================================================
+# Salmon Gill Health – Farm Sampling Sites Map
+# Always reads from and writes to mapping/
+# Coloured by Progress, labelled by Sample_Code, shaped by Company
+# Note: Ardyne (BA) and Benbecula (BB) excluded - no coordinates yet
+
+# ── 0. Define directories ─────────────────────────────────────────────────────
+```{r}
+in_dir  <- here("maps")
+out_dir <- here("maps")
+
+if (!dir.exists(out_dir)) dir.create(out_dir, recursive = TRUE)
+
+merge4$station_
+```
+
+# ── 1. Read & prepare data ────────────────────────────────────────────────────
+```{r}
+map_data <- merge4 %>%
+  filter(!is.na(Station_latitude) & !is.na(Station_longitude)) %>%
+  mutate(
+    Site_Label = paste0(Identifier, " - ", farm))
+```
+
+# ── 2. Map base layers ────────────────────────────────────────────────────────
+# High-resolution country polygons and coastline (requires rnaturalearthhires)
+```{r}
+world     <- ne_countries(scale = "large", returnclass = "sf")
+coastline <- ne_coastline(scale = "large", returnclass = "sf")
+```
+
+
+# Scotland bounding box
+
+```{r}
+lon_limits <- c(-11, 32)
+lat_limits <- c(49, 72)
+
+merge4$farm <- as.factor(merge4$farm)
+summary(merge4$farm)
+
+
+```
+
+# ── 3. Build map ──────────────────────────────────────────────────────────────
+```{r}
+# ── 3. Build map ──────────────────────────────────────────────────────────────
+p <- ggplot() +
+  
+  # Land polygons
+  geom_sf(data = world,
+          fill      = "lightgray",
+          color     = "white",
+          linewidth = 0.2) +
+  
+  # Crisp coastline on top
+  geom_sf(data = coastline,
+          color     = "gray40",
+          linewidth = 0.35,
+          fill      = NA) +
+  
+  # Site points: shape = farm
+  geom_point(data  = map_data,
+             aes(x     = Station_longitude,
+                 y     = Station_latitude,
+                 shape = farm),
+             size  = 3.5,
+             alpha = 1) +
+  
+  # Repelled labels with leader arrows
+  
+  coord_sf(xlim = lon_limits, ylim = lat_limits, expand = FALSE) +
+  
+  # ── Scales ────────────────────────────────────────────────────────────────
+  
+  scale_shape_manual(
+    values = c(
+      "ALG"               = 16,
+      "ATL"         = 17,
+      "JUR" = 18,
+      "KAL" = 19, 
+      "KIL" = 20,
+      "KOA" = 21,
+      "MUL" = 22,
+      "NTN" = 23, 
+      "OBA" = 24,
+      "SEA" = 25,
+      "WESA" = 26, 
+      "WESP" = 27
+    ),
+    name = "farm"
+  ) +
+  
+  scale_x_continuous(
+    labels = function(x) {
+      ifelse(x < 0,
+             paste0(abs(x), "\u00b0W"),
+             ifelse(x == 0, "0\u00b0", paste0(x, "\u00b0E")))
+    }
+  ) +
+  scale_y_continuous(
+    labels = function(y) paste0(y, "\u00b0N")
+  ) +
+  
+  # ── Labels ────────────────────────────────────────────────────────────────
+  labs(
+    title   = "Phytoplankton Sampling Sites",
+    x       = "Longitude",
+    y       = "Latitude",
+  ) +
+  
+  # ── Theme ─────────────────────────────────────────────────────────────────
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.major  = element_line(color = "gray85", linewidth = 0.3),
+    panel.grid.minor  = element_blank(),
+    panel.background  = element_rect(fill = "white", color = NA),
+    plot.background   = element_rect(fill = "white", color = NA),
+    plot.title        = element_text(size = 14, face = "bold", hjust = 0.5),
+    axis.title        = element_text(size = 12),
+    axis.text         = element_text(size = 10),
+    legend.position   = "bottom",
+    legend.box        = "horizontal",
+    legend.spacing.x  = unit(1.5, "cm"),
+    legend.margin     = margin(t = 20),
+    legend.title      = element_text(size = 11, face = "bold"),
+    legend.text       = element_text(size = 10),
+    plot.caption      = element_text(size = 8, color = "gray40", hjust = 0),
+    plot.margin       = margin(t = 15, r = 15, b = 15, l = 15)
+  ) +
+  
+  guides(
+    color = guide_legend(
+      title.position = "top",
+      title.hjust    = 0.5,
+      override.aes   = list(size = 3.5),
+      order          = 1
+    ),
+    shape = guide_legend(
+      title.position = "top",
+      title.hjust    = 0.5,
+      override.aes   = list(size = 3.5, color = "gray30"),
+      order          = 2
+    )
+  )
+
+# ── 4. Save outputs ───────────────────────────────────────────────────────────
+ggsave(file.path(out_dir, "scotland_farm_map.png"),
+       plot   = p,
+       width  = 8,
+       height = 10,
+       dpi    = 300,
+       bg     = "white")
+
+ggsave(file.path(out_dir, "scotland_farm_map.pdf"),
+       plot   = p,
+       width  = 8,
+       height = 10,
+       bg     = "white")
+
+message("Saved: ", file.path(out_dir, "scotland_farm_map.png"))
+message("Saved: ", file.path(out_dir, "scotland_farm_map.pdf"))
+
+# ── 5. Summary ────────────────────────────────────────────────────────────────
+```
+
+p <- ggplot() +
+  
+  # Land polygons
+  geom_sf(data = world,
+          fill      = "lightgray",
+          color     = "white",
+          linewidth = 0.2) +
+  
+  # Crisp coastline on top
+  geom_sf(data = coastline,
+          color     = "gray40",
+          linewidth = 0.35,
+          fill      = NA) +
+  
+  # Site points: shape = farm
+  geom_point(data  = map_data,
+             aes(x     = Station_longitude,
+                 y     = Station_latitude,
+                 shape = farm),
+             size  = 3.5,
+             alpha = 1) +
+  
+  # Repelled labels with leader arrows
+  geom_text_repel(data = map_data,
+                  aes(x     = Station_longitude,
+                      y     = Station_latitude,
+                      label = Site_Label),
+                  size               = 3.2,
+                  fontface           = "plain",
+                  color              = "black",
+                  bg.color           = NA,
+                  box.padding        = 1.2,
+                  point.padding      = 0.4,
+                  segment.color      = "black",
+                  segment.size       = 0.4,
+                  segment.alpha      = 1,
+                  arrow              = arrow(length = unit(0.015, "npc"),
+                                             type   = "closed",
+                                             angle  = 20),
+                  max.overlaps       = Inf,
+                  force              = 1.0,
+                  force_pull         = 0.3,
+                  min.segment.length = 0.1,
+                  xlim               = c(-11, 2),
+                  ylim               = c(49.5, 61),
+                  direction          = "both") +
+  
+  coord_sf(xlim = lon_limits, ylim = lat_limits, expand = FALSE) +
+  
+  # ── Scales ────────────────────────────────────────────────────────────────
+  
+  scale_shape_manual(
+    values = c(
+      "ALG"               = 16,
+      "ATL"         = 17,
+      "JUR" = 18,
+      "KAL" = 19, 
+      "KIL" = 20,
+      "KOA" = 21,
+      "MUL" = 22,
+      "NTN" = 23, 
+      "OBA" = 24,
+      "SEA" = 25,
+      "WESA" = 26, 
+      "WESP" = 27,
+    ),
+    name = "farm"
+  ) +
+  
+  scale_x_continuous(
+    labels = function(x) {
+      ifelse(x < 0,
+             paste0(abs(x), "\u00b0W"),
+             ifelse(x == 0, "0\u00b0", paste0(x, "\u00b0E")))
+    }
+  ) +
+  scale_y_continuous(
+    labels = function(y) paste0(y, "\u00b0N")
+  ) +
+  
+  # ── Labels ────────────────────────────────────────────────────────────────
+  labs(
+    title   = "Salmon Gill Health Sampling Sites",
+    x       = "Longitude",
+    y       = "Latitude",
+    caption = "Note: Ardyne (BA) and Benbecula (BB) excluded \u2014 coordinates not yet available."
+  ) +
+  
+  # ── Theme ─────────────────────────────────────────────────────────────────
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.major  = element_line(color = "gray85", linewidth = 0.3),
+    panel.grid.minor  = element_blank(),
+    panel.background  = element_rect(fill = "white", color = NA),
+    plot.background   = element_rect(fill = "white", color = NA),
+    plot.title        = element_text(size = 14, face = "bold", hjust = 0.5),
+    axis.title        = element_text(size = 12),
+    axis.text         = element_text(size = 10),
+    legend.position   = "bottom",
+    legend.box        = "horizontal",
+    legend.spacing.x  = unit(1.5, "cm"),
+    legend.margin     = margin(t = 20),
+    legend.title      = element_text(size = 11, face = "bold"),
+    legend.text       = element_text(size = 10),
+    plot.caption      = element_text(size = 8, color = "gray40", hjust = 0),
+    plot.margin       = margin(t = 15, r = 15, b = 15, l = 15)
+  ) +
+  
+  guides(
+    color = guide_legend(
+      title.position = "top",
+      title.hjust    = 0.5,
+      override.aes   = list(size = 3.5),
+      order          = 1
+    ),
+    shape = guide_legend(
+      title.position = "top",
+      title.hjust    = 0.5,
+      override.aes   = list(size = 3.5, color = "gray30"),
+      order          = 2
+    )
+  )
+
+# ── 4. Save outputs ───────────────────────────────────────────────────────────
+ggsave(file.path(out_dir, "scotland_farm_map.png"),
+       plot   = p,
+       width  = 8,
+       height = 10,
+       dpi    = 300,
+       bg     = "white")
+
+ggsave(file.path(out_dir, "scotland_farm_map.pdf"),
+       plot   = p,
+       width  = 8,
+       height = 10,
+       bg     = "white")
+
+message("Saved: ", file.path(out_dir, "scotland_farm_map.png"))
+message("Saved: ", file.path(out_dir, "scotland_farm_map.pdf"))
+
+# ── 5. Summary ────────────────────────────────────────────────────────────────
+
