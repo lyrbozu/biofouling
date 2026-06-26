@@ -1,4 +1,5 @@
 #All adjustment sets for total/direct effects
+#SST and Current are too collinear to be in same adjustment sets
 adj_registry <- list(
   
   # SEAWEED GROWTH
