@@ -7,8 +7,10 @@ library(posterior)
 library(tidyverse)
 library(patchwork)
 library(bayesplot)
+library(ggplot2)
 ```
 **Dataset**
+must run chunk
 ```{r}
 data <- read.csv("data.csv")
 df <- data
@@ -85,13 +87,100 @@ daylight_total <- list(
 )
 ```
 
+**Data list**
+```{r}
+#Direct (run chunk all at once)
+
+#daylight mis/obs
+day_obs_idx  <- which(!is.na(df$daylight))
+day_miss_idx <- which(is.na(df$daylight))
+
+#ccurrent miss/obs
+cur_obs_idx  <- which(!is.na(df$current))
+cur_miss_idx <- which(is.na(df$current))
+
+#seaweed growth miss/obs
+sw_obs_idx  <- which(!is.na(df$seaweed_growth))
+sw_miss_idx <- which(is.na(df$seaweed_growth))
+
+#phytoplanlton miss/obs
+phy_obs_idx  <- which(!is.na(df$phyto))
+phy_miss_idx <- which(is.na(df$phyto))
+
+#list
+daylight_direct <- list(
+  N = nrow(df),
+  biofouling = df$biofouling,
+
+  #Exposure - daylight
+  N_day_obs  = length(day_obs_idx),
+  N_day_miss = length(day_miss_idx),
+  day_obs_idx  = day_obs_idx,
+  day_miss_idx = day_miss_idx,
+  day_obs      = df$daylight[day_obs_idx],
+  imp_day_mean = mean(df$daylight, na.rm = TRUE),
+  imp_day_sd   = sd(df$daylight, na.rm = TRUE),
+
+  #adjustment sets
+  #current
+  N_cur_obs  = length(cur_obs_idx),
+  N_cur_miss = length(cur_miss_idx),
+  cur_obs_idx  = cur_obs_idx,
+  cur_miss_idx = cur_miss_idx,
+  cur_obs      = df$current[cur_obs_idx],
+  imp_cur_mean = mean(df$current, na.rm = TRUE),
+  imp_cur_sd   = sd(df$current, na.rm = TRUE),
+
+  #seaweed growth
+  N_sw_obs  = length(sw_obs_idx),
+  N_sw_miss = length(sw_miss_idx),
+  sw_obs_idx  = sw_obs_idx,
+  sw_miss_idx = sw_miss_idx,
+  sw_obs      = df$seaweed_growth[sw_obs_idx],
+  imp_sw_mean = mean(df$seaweed_growth, na.rm = TRUE),
+  imp_sw_sd   = sd(df$seaweed_growth, na.rm = TRUE),
+
+  #phytoplankton
+  N_phy_obs  = length(phy_obs_idx),
+  N_phy_miss = length(phy_miss_idx),
+  phy_obs_idx  = phy_obs_idx,
+  phy_miss_idx = phy_miss_idx,
+  phy_obs      = df$phyto[phy_obs_idx],
+  imp_phy_mean = mean(df$phyto, na.rm = TRUE),
+  imp_phy_sd   = sd(df$phyto, na.rm = TRUE),
+
+  #random effects
+  #nested w/ farm -> replicates
+  farm_id    = as.integer(factor(df$farm)),
+  replicate_id = as.integer(factor(df$replicate)),
+  J_farm     = length(unique(df$farm)),
+  J_replicate  = length(unique(df$replicate)),
+
+  #intervention grid
+  N_interv = 11,
+  do_daylight = seq(
+    min(df$daylight, na.rm = TRUE),
+    max(df$daylight, na.rm = TRUE),
+    length.out = 11
+  )
+)
+```
+
+
 **Total**
 ```{r}
 mod <- cmdstan_model("daylight.stan")
 ```
 
-Fitting 
+**Direct**
 ```{r}
+moddirect <- cmdstan_model("daylightdirect.stan")
+```
+
+
+**Fitting - Total**
+```{r}
+#total
 fit_total <- mod$sample(
   data = daylight_total,
   chains = 4,
@@ -102,11 +191,26 @@ fit_total <- mod$sample(
   show_messages = TRUE
 )
 ```
+**Fitting - Direct**
+```{r}
+fit_direct <- moddirect$sample(
+  data = daylight_direct,
+  chains = 4,
+  parallel_chains = 4,
+  iter_warmup = 1000,
+  iter_sampling = 1000,
+  adapt_delta = 0.95,
+  show_messages = TRUE
+)
+```
+
 
 **Extracting**
 ```{r}
 #sim
 y_rep <- fit_total$draws("y_rep")
+y_repd <- fit_direct$draws("y_rep")
+y_repd_mat <- as_draws_matrix(y_repd)
 y_rep_mat <- as_draws_matrix(y_rep) #convert to matrix
 y_obs <- df$biofouling #observations
 
@@ -116,30 +220,51 @@ y_obs <- df$biofouling #observations
 
 **ppc histogram (not great)**
 ```{r}
-ppc_hist(
+#total
+pth <- ppc_hist(
   y = y_obs,
   yrep = y_rep_mat[1:50, ]  
 ) +
-  ggplot2::labs(title = "Posterior predictive check - histogram")
+  ggplot2::labs(title = "Total Posterior predictive check - histogram")
+
+#direct
+pdh <- ppc_hist(
+  y = y_obs,
+  yrep = y_repd_mat[1:50, ]  
+) +
+  ggplot2::labs(title = "Direct Posterior predictive check - histogram")
+
+pdh / pth #uglyy
 ```
 **PPC no zeros sim vs true distribution**
 ```{r}
 #no zero index
 nz_idx <- y_obs > 0
-#plot
-ppc_dens_overlay(
+#total plot
+pt <- ppc_dens_overlay(
   y = y_obs[nz_idx],
   yrep = y_rep_mat[1:50, nz_idx]
 ) +
-  ggplot2::labs(title = "PPC — non-zero values only")
+  ggplot2::labs(title = "Total PPC — non-zero values only")
+
+#direct plot
+pd <- ppc_dens_overlay(
+  y = y_obs[nz_idx],
+  yrep = y_repd_mat[1:50, nz_idx]
+) +
+  ggplot2::labs(title = "Direct PPC — non-zero values only")
+
+pd / pt
 ```
 **Zeroes observed**
 ```{r}
 # Proportion of zeros in observed vs simulated
 prop_zero <- function(x) mean(x == 0)
 
+#pulls from y_rep_draws so will plot most recent model run 
 ppc_stat(y_obs, y_rep_draws, stat = prop_zero) +
   labs(title = "Proportion of zeros: observed vs simulated")
+
 ```
 
 **Farm distributions**
@@ -157,6 +282,11 @@ df |>
 ppc_stat_2d(y_obs, y_rep_draws,
             stat = c("mean", "sd")) +
   labs(title = "Mean vs SD: observed vs simulated")
+```
+```{r}
+ppc_stat(y_obs, y_rep_draws,
+         stat = function(x) quantile(x, 0.95)) +
+  labs(title = "95th percentile: observed vs simulated")
 ```
 
 **Actual Results**
@@ -179,6 +309,25 @@ summary_effects <- function(x) {
 summary_effects(b_int)
 summary_effects(b_zi) #occupancy > intensity but both positive
 ```
+**direct model effects**
+```{r}
+b_int  <- fit_direct$draws("b_daylight", format = "matrix") #intensity
+b_zi   <- fit_direct$draws("b_daylight_zi", format = "matrix") #occupancy
+
+summary_effects <- function(x) {
+  c(
+    mean = mean(x),
+    sd   = sd(x),
+    q2.5 = quantile(x, 0.025),
+    q97.5 = quantile(x, 0.975),
+    prob_pos = mean(x > 0)
+  )
+}
+
+summary_effects(b_int)
+summary_effects(b_zi) #Intensity higher than in total effect
+```
+
 **Gcomp**
 ```{r}
 Ey_do <- fit_total$draws("Ey_do", format = "matrix")
@@ -190,18 +339,43 @@ Ey_summary <- data.frame(
   hi    = apply(Ey_do, 2, quantile, 0.975)
 )
 
+
 Ey_summary
 
-#standard
-ggplot(Ey_summary, aes(x = do_value, y = mean)) +
+#standard - increase light and biofouling increases
+gtp <- ggplot(Ey_summary, aes(x = do_value, y = mean)) +
   geom_line() +
   geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.2) +
   labs(
-    title = "E[Y | do(daylight)] — G-computation",
+    title = "E[Y | do(daylight)] - G-computation",
     x = "Daylight intervention",
     y = "Expected biofouling"
   )
 ```
+**Gcomp**
+```{r}
+Ey_do <- fit_direct$draws("Ey_do", format = "matrix")
 
+Ey_summary <- data.frame(
+  do_value = daylight_direct$do_daylight,
+  mean  = apply(Ey_do, 2, mean),
+  lo    = apply(Ey_do, 2, quantile, 0.025),
+  hi    = apply(Ey_do, 2, quantile, 0.975)
+)
+
+Ey_summary
+
+#standard - increase light and biofouling increases
+gdp <- ggplot(Ey_summary, aes(x = do_value, y = mean)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.2) +
+  labs(
+    title = "Direct E[Y | do(daylight)] - G-computation",
+    x = "Daylight intervention",
+    y = "Expected biofouling"
+  )
+
+gdp / gtp
+```
 
 
