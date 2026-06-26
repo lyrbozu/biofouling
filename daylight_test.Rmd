@@ -1,0 +1,207 @@
+First run at causal models using daylight hours. Only done total so far. No adjustment set.
+
+**Libraries**
+```{r}
+library(cmdstanr)
+library(posterior)
+library(tidyverse)
+library(patchwork)
+library(bayesplot)
+```
+**Dataset**
+```{r}
+data <- read.csv("data.csv")
+df <- data
+#avoiding full 1
+df <- df |>
+  mutate(biofouling = if_else(
+    biofouling == 0, 
+    0,                                             
+    (biofouling * (n() - 1) + 0.5) / n()           
+  ))
+# 0-1 zib can only handle 0-1
+df$biofouling <- df$biofouling / 100
+
+#2 most important zooplankton
+df <- df %>%
+  mutate(pred_zoo = copepoda + arrow_worm)
+#temporary
+df <- df %>% 
+  mutate(nutrients =  NO2_um + NO3_um + PO4_um)
+
+df <- df %>%
+  rename(current = current_velocity_w17) %>%
+  rename(seaweed_growth = blade_length) %>%
+  rename(salinity = Salinity) %>%
+  rename(precipitation = precipitation_mm_w17) %>%
+  rename(daylight = daylight_duration_h_w17) %>%
+  rename(sst = sea_surface_temperature_c_w17) %>%
+  rename(phyto = total_phytoplankton) %>%
+  rename(cyphonautes = cyphonaute) %>%
+  rename(air_temp = avg_temp_w17)
+
+#scaling
+df <- df |>
+  mutate(across(c(nutrients, phyto, seaweed_growth, current,
+                  air_temp, sst, daylight, salinity,
+                  pred_zoo, precipitation, cyphonautes),
+                ~ scale(.)[,1]))
+
+```
+
+**Datalist**
+```{r}
+#Total list
+obs_idx  <- which(!is.na(df$daylight))
+miss_idx <- which(is.na(df$daylight))
+
+daylight_total <- list(
+  N = nrow(df),
+  biofouling = df$biofouling,
+  
+
+  #exposure
+  N_day_obs  = length(obs_idx),
+  N_day_miss = length(miss_idx),
+  day_obs_idx  = obs_idx,
+  day_miss_idx = miss_idx,
+  day_obs      = df$daylight[obs_idx],
+  imp_day_mean = mean(df$daylight, na.rm = TRUE),
+  imp_day_sd   = sd(df$daylight, na.rm = TRUE),
+
+  #nested random effect - farm + replicate
+  farm_id    = as.integer(factor(df$farm)),
+  replicate_id = as.integer(factor(df$replicate)),
+  J_farm     = length(unique(df$farm)),
+  J_replicate  = length(unique(df$replicate)),
+
+  # intervention grid
+  N_interv = 11,
+  do_daylight = seq(
+    min(df$daylight, na.rm = TRUE),
+    max(df$daylight, na.rm = TRUE),
+    length.out = 11
+  )
+)
+```
+
+**Total**
+```{r}
+mod <- cmdstan_model("daylight.stan")
+```
+
+Fitting 
+```{r}
+fit_total <- mod$sample(
+  data = daylight_total,
+  chains = 4,
+  parallel_chains = 4,
+  iter_warmup = 1000,
+  iter_sampling = 1000,
+  adapt_delta = 0.95,
+  show_messages = TRUE
+)
+```
+
+**Extracting**
+```{r}
+#sim
+y_rep <- fit_total$draws("y_rep")
+y_rep_mat <- as_draws_matrix(y_rep) #convert to matrix
+y_obs <- df$biofouling #observations
+
+```
+
+**Posterior Checks**
+
+**ppc histogram (not great)**
+```{r}
+ppc_hist(
+  y = y_obs,
+  yrep = y_rep_mat[1:50, ]  
+) +
+  ggplot2::labs(title = "Posterior predictive check - histogram")
+```
+**PPC no zeros sim vs true distribution**
+```{r}
+#no zero index
+nz_idx <- y_obs > 0
+#plot
+ppc_dens_overlay(
+  y = y_obs[nz_idx],
+  yrep = y_rep_mat[1:50, nz_idx]
+) +
+  ggplot2::labs(title = "PPC — non-zero values only")
+```
+**Zeroes observed**
+```{r}
+# Proportion of zeros in observed vs simulated
+prop_zero <- function(x) mean(x == 0)
+
+ppc_stat(y_obs, y_rep_draws, stat = prop_zero) +
+  labs(title = "Proportion of zeros: observed vs simulated")
+```
+
+**Farm distributions**
+```{r}
+df |>
+  filter(biofouling > 0) |>
+  ggplot(aes(x = biofouling, fill = farm)) +
+  geom_density(alpha = 0.4) +
+  facet_wrap(~farm, scales = "free_y") +
+  labs(title = "Non-zero biofouling distribution by farm")
+```
+**Mean and SD check**
+```{r}
+# SD + Mean
+ppc_stat_2d(y_obs, y_rep_draws,
+            stat = c("mean", "sd")) +
+  labs(title = "Mean vs SD: observed vs simulated")
+```
+
+**Actual Results**
+
+**model effects**
+```{r}
+b_int  <- fit_total$draws("b_daylight", format = "matrix") #intensity
+b_zi   <- fit_total$draws("b_daylight_zi", format = "matrix") #occupancy
+
+summary_effects <- function(x) {
+  c(
+    mean = mean(x),
+    sd   = sd(x),
+    q2.5 = quantile(x, 0.025),
+    q97.5 = quantile(x, 0.975),
+    prob_pos = mean(x > 0)
+  )
+}
+
+summary_effects(b_int)
+summary_effects(b_zi) #occupancy > intensity but both positive
+```
+**Gcomp**
+```{r}
+Ey_do <- fit_total$draws("Ey_do", format = "matrix")
+
+Ey_summary <- data.frame(
+  do_value = daylight_total$do_daylight,
+  mean  = apply(Ey_do, 2, mean),
+  lo    = apply(Ey_do, 2, quantile, 0.025),
+  hi    = apply(Ey_do, 2, quantile, 0.975)
+)
+
+Ey_summary
+
+#standard
+ggplot(Ey_summary, aes(x = do_value, y = mean)) +
+  geom_line() +
+  geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.2) +
+  labs(
+    title = "E[Y | do(daylight)] — G-computation",
+    x = "Daylight intervention",
+    y = "Expected biofouling"
+  )
+```
+
+
+
