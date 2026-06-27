@@ -59,7 +59,7 @@ df <- df |>
 
 ```{r}
 #Splits each variable into its missing and observed values
-#streamlined
+#helps with imputation
 prep_var <- function(x) {
   obs_idx  <- which(!is.na(x))
   miss_idx <- which(is.na(x))
@@ -79,12 +79,36 @@ prep_var <- function(x) {
 **'Preparing' Variables**
 ```{r}
 pv_airtemp <- prep_var(df$air_temp)
+pv_current <- prep_var(df$current)
+pv_daylight <- prep_var(df$daylight)
+pv_precip <- prep_var(df$precipitation)
+pv_predzoo <- prep_var(df$pred_zoo)
+pv_sst <- prep_var(df$sst)
+pv_sal <- prep_var(df$salinity)
+pv_nut <- prep_var(df$nutrients)
+pv_seaweed <- prep_var(df$seaweed_growth)
+pv_phyto <- prep_var(df$phyto)
+pv_cyph <- prep_var(df$cyphonautes)
 ```
 
 
 
 **Model datalist**
 ```{r}
-
+stan_data <- list(
+  N = nrow(df),
+  #random effects
+  J_farm = max(df$farm),
+  J_replicate = max(df$replicate),
+  farm_id    = as.integer(factor(df$farm)),
+  replicate_id = as.integer(factor(df$replicate)),
+  
+  #response
+  biofouling = df$biofouling,
+  
+  #exposure nodes
+  
+  
+)
 ```
 
