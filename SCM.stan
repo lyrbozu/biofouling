@@ -350,7 +350,11 @@ model {
   if (N_predzoo_miss > 0)
   predzoo_miss ~ normal(imp_predzoo_mean, imp_predzoo_sd);
   
-  
+  //Random effect priors
+  z_farm ~ std_normal();
+  z_replicate ~ std_normal();
+  sigma_farm ~ exponential(1);
+  sigma_replicate ~ exponential(1);
   
 }
   
