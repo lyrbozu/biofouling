@@ -508,31 +508,55 @@ model {
           + b_cyph_current * current[cyph_miss_idx],
           sigma_cyph);
           
-  //Biofouling
+  //Biofouling zero inflated beta regression
+  //mixture model 
+  // occupancy vs intensity
+  //check for biofouling at all
+  //check effect of things if biofouling is present
   //zero inflation such joy such joy such joy such joy
   for (n in 1:N) { 
+    real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]]; //random effects nested hierarchy
+    
+    //occupancy
+    // does biofouling exist at all
+    real p_occ = inv_logit(alpha_zi 
+    + b_zi_seaweed * seaweed[n]
+    + b_zi_phyto * phyto[n]
+    + b_zi_cyph * cyphonautes[n]
+    + re);
+    
+    if (biofouling[n] == 0) { 
+      target += log1m(p_occ); // if zero, log probability of it being zero. I THINK. 
+      } else { 
+        real mu_raw = inv_logit(alpha_bf
+        + b_bf_seaweed * seaweed[n]
+        + b_bf_phyto * phyto[n]
+        + b_bf_cyph * cyphonautes[n]
+        + re); 
+        real mu = fmax(eps, fmin(1-eps, mu_raw)); //mu cannot be 0 or 1 or it'll all explode
+        target += log(p_occ) 
+        + beta_lpdf(biofouling[n] | mu * phi, (1 - mu) * phi); //if not zero, return probability of being present from probability of it being zero
+        }
     
   }
-        )
-      )
-    )
-  )
-  )
-  )
-          
+  
+} //block }
+     
         
-      
+ generated quantities {
+   real eps = 1e-6;
+   
+   
+ }      
   
   
   
-}
-  
-  
-  //generated quantities
 
 
 
-//posteriors
+
+
+
 
 //gcomp - will need to do one gcomp section per node
 //will follow same format so not too difficult
