@@ -118,6 +118,16 @@ stan_data <- list(
   imp_airtemp_mean = pv_airtemp$imp_mean, #nodes w/o parents impute from air_temp dis and not function
   imp_airtemp_sd = pv_airtemp$imp_sd,
   
+  #Daylight
+  N_daylight_obs = pv_daylight$n_obs,
+  N_daylight_miss = pv_daylight$n_miss,
+  daylight_obs_idx = pv_daylight$obs_idx,
+  daylight_miss_idx = pv_daylight$miss_idx,
+  daylight_obs = pv_daylight$obs_vals,
+  imp_daylight_mean = pv_daylight$imp_mean,
+  imp_daylight_sd = pv_daylight$imp_sd,
+  
+  #Current
   
   
 )
