@@ -308,7 +308,13 @@ transformed parameters {
   if (N_cyph_miss > 0)
   cyphonautes[cyph_miss_idx] = cyph_miss;
   
+  //Random effects 
+  //non centering
+  // noise * variation = farm units
+  vector[J_farm] u_farm = sigma_farm * z_farm;
+  vector[J_replicate] u_replicate = sigma_replicate * z_replicate;
   
+}
   
   
   
