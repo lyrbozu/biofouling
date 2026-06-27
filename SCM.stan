@@ -315,13 +315,44 @@ transformed parameters {
   vector[J_replicate] u_replicate = sigma_replicate * z_replicate;
   
 }
+
+  
+  
+model {
+  
+  real eps = 1e-6; //no 0
+  
+  //Priors
+  //need priors for - 
+  //root node imputations
+  //random effects
+  // actual coefficient priors
+  
+  //root node imputation priors 
+  
+  //air temp
+  if (N_airtemp_miss > 0)
+  airtemp_miss ~ normal(imp_airtemp_mean, imp_airtemp_sd);
+  
+  //daylight
+  if (N_daylight_miss > 0)
+  daylight_miss ~ normal(imp_daylight_mean, imp_daylight_sd);
+  
+  //current 
+  if (N_current_miss > 0)
+  current_miss ~normal(imp_current_mean, imp_current_sd);
+  
+  //precipitation
+  if (N_precip_miss > 0)
+  precip_miss ~ normal(imp_precip_mean, imp_precip_sd);
+  
+  //predatory zooplankton
+  if (N_predzoo_miss > 0)
+  predzoo_miss ~ normal(imp_predzoo_mean, imp_predzoo_sd);
   
   
   
-  
-  
-  
-}  
+}
   
   
   
