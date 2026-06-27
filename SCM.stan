@@ -278,6 +278,37 @@ transformed parameters {
   //Intermediate nodes
   //no different
   
+  //sst
+  sst[sst_obs_idx] = sst_obs;
+  if (N_sst_miss > 0)
+  sst[sst_miss_idx] = sst_miss;
+  
+  //salinity 
+  salinity[sal_obs_idx] = sal_obs;
+  if (N_sal_miss > 0)
+  salinity[sal_miss_idx] = sal_miss;
+  
+  //nutrients
+  nutrients[nut_obs_idx] = nut_obs;
+  if (N_nut_miss > 0)
+  nutrients[nut_miss_idx] = nut_miss;
+  
+  //seaweed growth
+  seaweed[seaweed_obs_idx] = seaweed_obs;
+  if (N_seaweed_miss > 0)
+  seaweed[seaweed_miss_idx] = seaweed_miss;
+  
+  //phytoplankton abundance
+  phyto[phyto_obs_idx] = phyto_obs;
+  if (N_phyto_miss > 0 )
+  phyto[phyto_miss_idx] = phyto_miss;
+  
+  //cyphonautes
+  cyphonautes[cyph_obs_idx] = cyph_obs;
+  if (N_cyph_miss > 0)
+  cyphonautes[cyph_miss_idx] = cyph_miss;
+  
+  
   
   
   
