@@ -1,0 +1,90 @@
+### Corresponding Rmd for SCM.stan
+#### Started on 27/06/2026
+
+
+Will include data formatting, pre_var function, data list, model compiling, model fitting, convergence checks (?), coefficient extraction, intervention effects, and some plots.
+
+
+
+**Libraries**
+```{r}
+library(cmdstanr)
+library(posterior)
+library(tidyverse)
+library(patchwork)
+library(bayesplot)
+library(ggplot2)
+library(EValue)
+```
+
+**Dataset**
+```{r}
+data <- read.csv("data.csv")
+df <- data
+#avoiding full 1
+df <- df |>
+  mutate(biofouling = if_else(
+    biofouling == 0, 
+    0,                                             
+    (biofouling * (n() - 1) + 0.5) / n()           
+  ))
+# 0-1 zib can only handle 0-1
+df$biofouling <- df$biofouling / 100
+
+#2 most important zooplankton
+df <- df %>%
+  mutate(pred_zoo = copepoda + arrow_worm)
+#temporary
+df <- df %>% 
+  mutate(nutrients =  NO2_um + NO3_um + PO4_um)
+
+df <- df %>%
+  rename(current = current_velocity_w17) %>%
+  rename(seaweed_growth = blade_length) %>%
+  rename(salinity = Salinity) %>%
+  rename(precipitation = precipitation_mm_w17) %>%
+  rename(daylight = daylight_duration_h_w17) %>%
+  rename(sst = sea_surface_temperature_c_w17) %>%
+  rename(phyto = total_phytoplankton) %>%
+  rename(cyphonautes = cyphonaute) %>%
+  rename(air_temp = avg_temp_w17)
+
+#scaling
+df <- df |>
+  mutate(across(c(nutrients, phyto, seaweed_growth, current,
+                  air_temp, sst, daylight, salinity,
+                  pred_zoo, precipitation, cyphonautes),
+                ~ scale(.)[,1]))
+```
+
+```{r}
+#Splits each variable into its missing and observed values
+#streamlined
+prep_var <- function(x) {
+  obs_idx  <- which(!is.na(x))
+  miss_idx <- which(is.na(x))
+  list(
+    n_obs    = length(obs_idx),
+    n_miss   = length(miss_idx),
+    obs_idx  = obs_idx,
+    miss_idx = miss_idx,
+    obs_vals = x[obs_idx],
+    imp_mean = mean(x, na.rm = TRUE),
+    imp_sd   = sd(x,   na.rm = TRUE)
+  )
+}
+
+```
+
+**'Preparing' Variables**
+```{r}
+pv_airtemp <- prep_var(df$air_temp)
+```
+
+
+
+**Model datalist**
+```{r}
+
+```
+
