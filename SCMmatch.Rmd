@@ -162,6 +162,13 @@ stan_data <- list(
   sst_obs = pv_sst$obs_vals,
   
   #Salinity
+  N_sal_obs = pv_sal$n_obs,
+  N_sal_miss = pv_sal$n_miss,
+  sal_obs_idx = pv_sal$obs_idx,
+  sal_miss_idx = pv_sal$miss_idx,
+  sal_obs = pv_sal$obs_vals,
+  
+  
   
   
   
