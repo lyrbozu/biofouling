@@ -147,7 +147,14 @@ stan_data <- list(
   
   #Predatory zooplankton
   N_predzoo_obs = pv_predzoo$n_obs,
-  N_predzoo
+  N_predzoo_miss = pv_predzoo$n_miss,
+  predzoo_obs_idx = pv_predzoo$obs_idx,
+  predzoo_miss_idx = pv_predzoo$miss_idx,
+  imp_predzoo_mean = pv_predzoo$imp_mean,
+  imp_predzoo_sd = pv_predzoo$imp_sd,
+  predzoo_obs = pv_predzoo$obs_vals,
+  
+  
   
   #
   
