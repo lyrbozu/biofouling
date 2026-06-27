@@ -47,6 +47,33 @@ data {
   real imp_daylight_mean;
   real <lower=0> imp_daylight_sd;
   
+  //Current
+  int<lower=0> N_current_obs;
+  int<lower=0> N_current_miss;
+  array[N_current_obs] int current_obs_idx;
+  array[N_current_miss] int current_miss_idx;
+  vector[N_current_obs] current_obs;
+  real imp_current_mean;
+  real <lower=0> imp_current_sd;
+  
+  //Precipitation
+  int<lower=0> N_precip_obs;
+  int<lower=0> N_precip_miss;
+  array[N_precip_obs] int precip_obs_idx;
+  array[N_precip_miss] int precip_miss_idx;
+  vector[N_precip_obs] precip_obs;
+  real imp_precip_mean
+  real <lower=0> imp_current_sd;
+  
+  //Predatory Zooplankton
+  int<lower=0> N_predzoo_obs;
+  int<lower> N_predzoo_miss;
+  array[N_predzoo_obs] int precip_obs_idx;
+  array[N_predzoo_miss] int precip_miss_idx;
+  vector[N_predzoo_obs] predzoo_obs;
+  real imp_predzoo_mean;
+  real<lower=0> imp_predzoo_sd;
+  
   
   
   
