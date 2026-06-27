@@ -128,6 +128,16 @@ stan_data <- list(
   imp_daylight_sd = pv_daylight$imp_sd,
   
   #Current
+  N_current_obs = pv_current$n_obs,
+  N_current_miss = pv_current$n_miss,
+  current_obs_idx = pv_current$obs_idx,
+  current_miss_idx = pv_current$miss_idx, 
+  current_obs = pv_current$obs_vals,
+  imp_current_mean = pv_current$imp_mean, 
+  imp_current_sd = pv_current$imp_sd,
+  
+  #Precipitation 
+  
   
   
 )
