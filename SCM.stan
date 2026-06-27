@@ -62,7 +62,7 @@ data {
   array[N_precip_obs] int precip_obs_idx;
   array[N_precip_miss] int precip_miss_idx;
   vector[N_precip_obs] precip_obs;
-  real imp_precip_mean
+  real imp_precip_mean;
   real <lower=0> imp_current_sd;
   
   //Predatory Zooplankton
@@ -74,14 +74,63 @@ data {
   real imp_predzoo_mean;
   real<lower=0> imp_predzoo_sd;
   
+  //non-root nodes
+  
+  //structure same as root nodes w/o impute lines
+  
+  //SST
+  int<lower=0> N_sst_obs;
+  int<lower=0> N_sst_miss;
+  array[N_sst_obs] int sst_obs_idx;
+  array[N_sst_miss] int sst_miss_idx;
+  vector[N_sst_obs] sst_obs;
+  
+  //Salinity
+  int<lower=0> N_sal_obs;
+  int<lower=0> N_sal_miss;
+  array[N_sal_obs] int sal_obs_idx;
+  array[N_sal_miss] int sal_miss_idx;
+  vector[N_sal_obs] sal_obs;
+  
+  //Nutrients
+  int<lower=0> N_nut_obs;
+  int<lower=0> N_nut_miss;
+  array[N_nut_obs] int nut_obs_idx;
+  array[N_nut_miss] int nut_miss_idx;
+  vector[N_nut_obs] nut_obs;
+  
+  //Seaweed Growth
+  int<lower=0> N_seaweed_obs;
+  int<lower=0> N_seaweed_miss;
+  array[N_seaweed_obs] int seaweed_obs_idx;
+  array[N_seaweed_miss] int seaweed_miss_idx;
+  vector[N_seaweed_obs] seaweed_obs;
+  
+  //Phytoplankton
+  int<lower=0> N_phyto_obs;
+  int<lower=0> N_phyto_miss;
+  array[N_phyto_obs] int phyto_obs_idx;
+  array[N_phyto_miss] int phyto_miss_idx;
+  vector[N_phyto_obs] phyto_obs;
+  
+  //Cyphonautes
+  int<lower=0> N_cyph_obs;
+  int<lower=0> N_cyph_miss;
+  array[N_cyph_obs] int cyph_obs_idx;
+  array[N_cyph_miss] int cyph_miss_idx;
+  vector[N_cyph_obs] cyph_obs;
+  
+  //all nodes finished
+  
+  //Intervention grid
+  // One grid per node
+  
+  
   
   
   
   
 }
-
-//Intervention grid
-//on grid per node (besides biofouling)
 
 //imputation section
 
