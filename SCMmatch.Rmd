@@ -168,6 +168,35 @@ stan_data <- list(
   sal_miss_idx = pv_sal$miss_idx,
   sal_obs = pv_sal$obs_vals,
   
+  #Nutrients - NO3 + NO2 + PO4
+  N_nut_obs = pv_nut$n_obs,
+  N_nut_miss = pv_nut$n_miss,
+  nut_obs_idx = pv_nut$obs_idx,
+  nut_miss_idx = pv_nut$miss_idx,
+  nut_obs = pv_nut$obs_vals,
+  
+  #Seaweed growth 
+  N_seaweed_obs = pv_seaweed$n_obs,
+  N_seaweed_miss = pv_seaweed$n_miss,
+  seaweed_obs_idx = pv_seaweed$obs_idx,
+  seaweed_miss_idx = pv_seaweed$miss_idx,
+  seaweed_obs = pv_seaweed$obs_vals,
+  
+  #Phytoplankton
+  N_phyto_obs = pv_phyto$n_obs,
+  N_phyto_miss = pv_phyto$n_miss,
+  phyto_obs_idx = pv_phyto$obs_idx,
+  phyto_miss_idx = pv_phyto$miss_idx,
+  phyto_obs = pv_phyto$obs_vals,
+  
+  #Cyphonautes
+  N_cyph_obs = pv_cyph$n_obs,
+  N_cyph_miss = pv_cyph$n_miss,
+  cyph_obs_idx = pv_cyph$obs_idx,
+  cyph_miss_idx = pv_cyph$miss_idx,
+  cyph_obs = pv_cyph$obs_vals,
+  
+  
   
   
   
