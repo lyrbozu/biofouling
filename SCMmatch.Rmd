@@ -91,6 +91,12 @@ pv_phyto <- prep_var(df$phyto)
 pv_cyph <- prep_var(df$cyphonautes)
 ```
 
+**Intervention grid shtuff**
+```{r}
+N_interv <- 11 
+interv_grid <- seq(-1, 1, length.out = N_interv) #range of interventions
+```
+
 
 
 **Model datalist**
@@ -196,11 +202,17 @@ stan_data <- list(
   cyph_miss_idx = pv_cyph$miss_idx,
   cyph_obs = pv_cyph$obs_vals,
   
-  
-  
-  
-  
-  
-)
+  #Intervention grids - carrying over gcomp stuff from causal model
+  N_interv = N_interv,
+  do_airtemp = interv_grid,
+  do_current = interv_grid,
+  do_daylight = interv_grid,
+  do_precip = interv_grid,
+  do_predzoo = interv_grid,
+  do_sst = interv_grid,
+  do_nutrients = interv_grid,
+  do_seaweed = interv_grid,
+  do_phyto = interv_grid
+) 
 ```
 
