@@ -161,14 +161,81 @@ parameters {
   vector[N_phyto_miss] phyto_miss;
   vector[N_cyph_miss] cyph_miss;
   
+  //defining model structures
+  //only for intermediate nodes
+  
+  //SST parent = airtemp
+  real a_sst;
+  real b_sst_airtemp;
+  real<lower=0> sigma_sst;
+  
+  //Salinity parent = precipitation
+  real a_sal;
+  real b_sal_precip;
+  real<lower=0> sigma_sal;
+  
+  //Nutrients 
+  //parents = sst, current, precipitation
+  //stratification parents
+  real a_nut;
+  real b_nut_sst;
+  real b_nut_current;
+  real b_nut_precip;
+  real<lower=0> sigma_nut;
+  
+  //Seaweed growth 
+  //parents = sst, nutrients, daylight
+  real a_seaweed;
+  real b_seaweed_sst;
+  real b_seaweed_nut;
+  real b_seaweed_daylight;
+  real<lower=0> sigma_seaweed;
+  
+  //Phytoplankton
+  //parents = salinity, nutrients, daylight
+  real a_phyto;
+  real b_phyto_sal;
+  real b_phyto_nut;
+  real b_phyto_daylight;
+  real<lower=0> sigma_phyto;
+  
+  //Cyphonautes
+  //parents = phytoplankton, predzoo, current
+  real a_cyph;
+  real b_cyph_phyto;
+  real b_cyph_predzoo;
+  real b_cyph_current;
+  real<lower=0> sigma_cyph;
+  
+  //Biofouling
+  //parents = seaweed, phytoplankton, cyphonautes
+  //Intensity model 
+  real alpha_bf;
+  real b_bf_seaweed;
+  real b_bf_phyto;
+  real b_bf_cyph;
+  real<lower=1> phi; //zero inflated beta
+  //occupancy 
+  real alpha_zi;
+  real b_zi_seaweed;
+  real b_zi_phyto;
+  real b_zi_cyph;
+  
+  //Random effects 
+  //nested w/ farm/replicate
+  vector[J_farm] z_farm;
+  vector[J_replicate] z_replicate;
+  real<lower=0> sigma_farm;
+  real<lower=0> sigma_replicate;
+}
+  
+  
+  
+  
   
   
 }
 
-
-//model structures
-
-//random effects
 
 //transformed params
 
