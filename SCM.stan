@@ -124,12 +124,20 @@ data {
   
   //Intervention grid
   // One grid per node
+  // same do(X=x) logic as causal model
   
-  
-  
-  
-  
-  
+  int<lower=1> N_interv;
+  vector[N_interv] do_airtemp;
+  vector[N_interv] do_daylight;
+  vector[N_interv] do_current;
+  vector[N_interv] do_predzoo;
+  vector[N_interv] do_precip;
+  vector[N_interv] do_sst;
+  vector[N_interv] do_nutrients;
+  vector[N_interv] do_seaweed;
+  vector[N_interv] do_phyto;
+  vector[N_interv] do_salinity;
+  vector[N_interv] do_cypho;
 }
 
 //imputation section
