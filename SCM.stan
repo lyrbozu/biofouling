@@ -235,6 +235,20 @@ transformed parameters {
   //this block will
   //reconstruct vectors from the observed and imputed values
   
+  #assigning
+  vector[N] air_temp;
+  vector[N] daylight;
+  vector[N] current;
+  vector[N] precip;
+  vector[N] pred_zoo;
+  vector[N] sst;
+  vector[N] salinity;
+  vector[N] nutrients;
+  vector[N] seaweed;
+  vector[N] phyto;
+  vector[N] cyphonautes;
+  
+  
 }  
   
   
