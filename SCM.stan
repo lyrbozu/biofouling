@@ -38,6 +38,14 @@ data {
   real imp_airtemp_mean;
   real <lower=0> imp_airtemp_sd;
   
+  //Daylight
+  int<lower=0> N_daylight_obs;
+  int<lower=0> N_daylight_miss;
+  array[N_daylight_obs] int daylight_obs_idx;
+  array[N_daylight_miss] int daylight_miss_idx;
+  vector[N_daylight_obs] daylight_obs;
+  real imp_daylight_mean;
+  real <lower=0> imp_daylight_sd;
   
   
   
