@@ -461,7 +461,64 @@ model {
 //imputation for intermediate nodes
 //uses functions to generate new values
           
+  //sst 
+  if (N_sst_miss > 0)
+  sst_miss ~ normal(
+    a_sal + b_sst_airtemp * air_temp[sst_miss_idx],
+    sigma_sst);
+    
+  //salinity
+  if (N_salinity_miss > 0)
+  sal_miss ~ normal(
+    a_sal + b_sal_precip * precip[sal_miss_idx],
+    sigma_sal);
+    
+  //Nutrients
+  if (N_nut_miss > 0)
+  nut_miss ~ normal(
+    a_nut + b_nut_sst * sst[nut_miss_idx]
+    + b_nut_current * current[nut_miss_idx]
+    + b_nut_precip * precip[nut_miss_idx],
+    sigma_nut);
+    
+    //Seaweed growth
+    if (N_seaweed_miss > 0)
+    seaweed_miss ~ normal(
+      a_seaweed + 
+      b_seaweed_sst * sst[seaweed_miss_idx]
+      + b_seaweed_nut * nutrients[seaweed_miss_idx]
+      + b_seaweed_daylight * daylight[seaweed_miss_idx],
+      sigma_seaweed);
+      
+      //Phytoplankton
+      if (N_phyto_miss > 0)
+      phyto_miss ~ normal(
+        a_phyto + 
+        b_phyto_sal * salinity[phyto_miss_idx] 
+        + b_phyto_nut * nutrients[phyto_miss_idx] 
+        + b_phyto_daylight * daylight[phyto_miss_idx],
+        sigma_phyto);
+        
+        //Cyphonautes
+        if (N_cyph_miss > 0)
+        cyph_miss ~ normal(
+          a_cyph
+          + b_cyph_phyto * phyto[cyph_miss_idx]
+          + b_cyph_predzoo * pred_zoo[cyph_miss_idx]
+          + b_cyph_current * current[cyph_miss_idx],
+          sigma_cyph);
           
+  //Biofouling
+  //zero inflation such joy such joy such joy such joy
+  for (n in 1:N) { 
+    
+  }
+        )
+      )
+    )
+  )
+  )
+  )
           
         
       
