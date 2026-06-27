@@ -546,7 +546,27 @@ model {
  generated quantities {
    real eps = 1e-6;
    
-   
+   //Posterior Predictive
+   vector[N] y_rep;
+   for(n in 1:N) {
+     real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
+     real p_occ = inv_logit(alpha_zi + 
+     b_zi_seaweed * seaweed[n]
+     + b_zi_phyto + phyto [n]
+     + b_zi_cyph * cyphonautes[n] 
+     + re);
+    
+    real mu_raw = inv_logit(alpha_bf + 
+    b_bf_seaweed * seaweed[n] + 
+    b_bf_phyto * phyto[n] 
+    + b_bf_cyph * cyphonautes[n]
+    + re);
+    real mu = fmax(eps, fmin(1 - eps, mu_raw));
+    if (bernoulli_rng(p_occ)) y_rep[n] = beta_rng(mu * phi, (1- mu) * phi);
+    else
+    y_rep[n] = 0;
+    
+   }
  }      
   
   
