@@ -118,6 +118,87 @@ stan_data <- list(
   imp_airtemp_mean = pv_airtemp$imp_mean, #nodes w/o parents impute from air_temp dis and not function
   imp_airtemp_sd = pv_airtemp$imp_sd,
   
+  #Daylight
+  N_daylight_obs = pv_daylight$n_obs,
+  N_daylight_miss = pv_daylight$n_miss,
+  daylight_obs_idx = pv_daylight$obs_idx,
+  daylight_miss_idx = pv_daylight$miss_idx,
+  daylight_obs = pv_daylight$obs_vals,
+  imp_daylight_mean = pv_daylight$imp_mean,
+  imp_daylight_sd = pv_daylight$imp_sd,
+  
+  #Current
+  N_current_obs = pv_current$n_obs,
+  N_current_miss = pv_current$n_miss,
+  current_obs_idx = pv_current$obs_idx,
+  current_miss_idx = pv_current$miss_idx, 
+  current_obs = pv_current$obs_vals,
+  imp_current_mean = pv_current$imp_mean, 
+  imp_current_sd = pv_current$imp_sd,
+  
+  #Precipitation 
+  N_precip_obs = pv_precip$n_obs,
+  N_precip_miss = pv_precip$n_miss,
+  precip_obs_idx = pv_precip$obs_idx,
+  precip_miss_idx = pv_precip$miss_idx,
+  precip_obs = pv_precip$obs_vals, 
+  imp_precip_mean = pv_precip$imp_mean,
+  imp_precip_sd = pv_precip$imp_sd,
+  
+  #Predatory zooplankton
+  N_predzoo_obs = pv_predzoo$n_obs,
+  N_predzoo_miss = pv_predzoo$n_miss,
+  predzoo_obs_idx = pv_predzoo$obs_idx,
+  predzoo_miss_idx = pv_predzoo$miss_idx,
+  imp_predzoo_mean = pv_predzoo$imp_mean,
+  imp_predzoo_sd = pv_predzoo$imp_sd,
+  predzoo_obs = pv_predzoo$obs_vals,
+  
+  #Sea surface temperature 
+  N_sst_obs = pv_sst$n_obs,
+  N_sst_miss = pv_sst$n_miss,
+  sst_obs_idx = pv_sst$obs_idx,
+  sst_miss_idx = pv_sst$miss_idx,
+  sst_obs = pv_sst$obs_vals,
+  
+  #Salinity
+  N_sal_obs = pv_sal$n_obs,
+  N_sal_miss = pv_sal$n_miss,
+  sal_obs_idx = pv_sal$obs_idx,
+  sal_miss_idx = pv_sal$miss_idx,
+  sal_obs = pv_sal$obs_vals,
+  
+  #Nutrients - NO3 + NO2 + PO4
+  N_nut_obs = pv_nut$n_obs,
+  N_nut_miss = pv_nut$n_miss,
+  nut_obs_idx = pv_nut$obs_idx,
+  nut_miss_idx = pv_nut$miss_idx,
+  nut_obs = pv_nut$obs_vals,
+  
+  #Seaweed growth 
+  N_seaweed_obs = pv_seaweed$n_obs,
+  N_seaweed_miss = pv_seaweed$n_miss,
+  seaweed_obs_idx = pv_seaweed$obs_idx,
+  seaweed_miss_idx = pv_seaweed$miss_idx,
+  seaweed_obs = pv_seaweed$obs_vals,
+  
+  #Phytoplankton
+  N_phyto_obs = pv_phyto$n_obs,
+  N_phyto_miss = pv_phyto$n_miss,
+  phyto_obs_idx = pv_phyto$obs_idx,
+  phyto_miss_idx = pv_phyto$miss_idx,
+  phyto_obs = pv_phyto$obs_vals,
+  
+  #Cyphonautes
+  N_cyph_obs = pv_cyph$n_obs,
+  N_cyph_miss = pv_cyph$n_miss,
+  cyph_obs_idx = pv_cyph$obs_idx,
+  cyph_miss_idx = pv_cyph$miss_idx,
+  cyph_obs = pv_cyph$obs_vals,
+  
+  
+  
+  
   
   
 )
