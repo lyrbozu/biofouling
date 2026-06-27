@@ -137,6 +137,19 @@ stan_data <- list(
   imp_current_sd = pv_current$imp_sd,
   
   #Precipitation 
+  N_precip_obs = pv_precip$n_obs,
+  N_precip_miss = pv_precip$n_miss,
+  precip_obs_idx = pv_precip$obs_idx,
+  precip_miss_idx = pv_precip$miss_idx,
+  precip_obs = pv_precip$obs_vals, 
+  imp_precip_mean = pv_precip$imp_mean,
+  imp_precip_sd = pv_precip$imp_sd,
+  
+  #Predatory zooplankton
+  N_predzoo_obs = pv_predzoo$n_obs,
+  N_predzoo
+  
+  #
   
   
   
