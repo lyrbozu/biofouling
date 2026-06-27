@@ -95,6 +95,20 @@ pv_cyph <- prep_var(df$cyphonautes)
 
 **Model datalist**
 ```{r}
-
+stan_data <- list(
+  N = nrow(df),
+  #random effects
+  J_farm = max(df$farm),
+  J_replicate = max(df$replicate),
+  farm_id    = as.integer(factor(df$farm)),
+  replicate_id = as.integer(factor(df$replicate)),
+  
+  #response
+  biofouling = df$biofouling,
+  
+  #exposure nodes
+  
+  
+)
 ```
 
