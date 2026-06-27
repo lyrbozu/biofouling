@@ -569,7 +569,18 @@ model {
    }
  }      
   
-  
+ //Interventions
+ vector[N_interv] Ey_do_airtemp;
+ vector[N_interv] Ey_do_current;
+ vector[N_interv] Ey_do_daylight;
+ vector[N_interv] Ey_do_precip;
+ vector[N_interv] Ey_do_predzoo;
+ vector[N_interv] Ey_do_sst;
+ vector[N_interv] Ey_do_nutrients;
+ vector[N_interv] Ey_do_seaweed;
+ vector[N_interv] Ey_do_phyto;
+ 
+ for (k in 1:N_interv) { }
   
 
 
