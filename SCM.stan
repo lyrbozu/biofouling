@@ -15,6 +15,33 @@ data {
   //Response = biofouling
   vector<lower=0, upper = 1>[N] biofouling;
   
+  //Exposure nodes
+  //starting with nodes w/o parents
+  //root nodes
+  
+  //structure 
+  //number of observed vals 
+  //number of missing vals
+  //obs index
+  //miss index
+  //observed values
+  //imputation of mean
+  //imputation of sd
+  //same for all root nodes
+  
+  //Air temperature
+  int<lower=0> N_airtemp_obs;
+  int<lower=0> N_airtemp_miss;
+  array[N_airtemp_obs] int airtemp_obs_idx;
+  array[N_airtemp_miss] int airtemp_miss_idx;
+  vector[N_airtemp_obs] airtemp_obs;
+  real imp_airtemp_mean;
+  real <lower=0> imp_airtemp_sd;
+  
+  
+  
+  
+  
   
 }
 
