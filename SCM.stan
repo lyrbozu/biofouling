@@ -410,19 +410,70 @@ model {
   b_zi_cyph ~ normal(0,2);
   
   
+  //Structural equations
+  
+  //SST
+  //parent only air temperature
+  sst ~ normal(a_sst + b_sst_airtemp * air_temp, sigma_sst);
+  
+  //Salinity 
+  //parent only precipitation
+  salinity ~ normal(a_sal + b_sal_precip * precip, sigma_sal);
+  
+  //nutrients
+  //messy
+  // parents - sst + current + precipitation
+  nutrients ~ normal(
+    a_nut + 
+    b_nut_sst * sst + 
+    b_nut_current * current + 
+    b_nut_precip * precip, 
+    sigma_nut);
+    
+    //Seaweed growth
+    // parents - sst + nutrients + daylight
+    seaweed ~ normal(
+      a_seaweed + 
+      b_seaweed_sst * sst + 
+      b_seaweed_nut * nutrients + 
+      b_seaweed_daylight * daylight, 
+      sigma_seaweed);
+      
+      //Phytoplankton 
+      //parents - Salinity + nutrients + daylight
+      phyto ~ normal(
+        a_phyto + 
+        b_phyto_sal * salinity + 
+        b_phyto_nut * nutrients +  
+        b_phyto_daylight * daylight, 
+        sigma_phyto);
+        
+        //Cyphonautes
+        //parents - phytoplankton + predatory zooplankton + current
+        cyphonautes ~ normal(
+          a_cyph + 
+          b_cyph_phyto * phyto + 
+          b_cyph_predzoo * pred_zoo + 
+          b_cyph_current * current, 
+          sigma_cyph);
+          
+          
+//imputation for intermediate nodes
+//uses functions to generate new values
+          
+          
+          
+        
+      
+  
   
   
 }
   
   
-  
+  //generated quantities
 
 
-
-
-//priors
-
-//structural equations?
 
 //posteriors
 
