@@ -161,6 +161,19 @@ parameters {
   vector[N_phyto_miss] phyto_miss;
   vector[N_cyph_miss] cyph_miss;
   
+  //defining model structures
+  //only for intermediate nodes
+  
+  //SST parent = airtemp
+  real a_sst;
+  real b_sst_airtemp;
+  real<lower=0> sigma_sst;
+  
+  //Salinity parent = precipitation
+  real a_sal;
+  real b_sal_precip;
+  real<lower=0> sigma_sal;
+  
   
   
 }
