@@ -97,7 +97,7 @@ pv_cyph <- prep_var(df$cyphonautes)
 ```{r}
 stan_data <- list(
   N = nrow(df),
-  #random effects
+  #random effectss
   J_farm = max(df$farm),
   J_replicate = max(df$replicate),
   farm_id    = as.integer(factor(df$farm)),
@@ -106,7 +106,18 @@ stan_data <- list(
   #response
   biofouling = df$biofouling,
   
-  #exposure nodes
+  #exposure nodes -
+  #starting w/ root nodes
+  
+  #Air Temperature
+  N_airtemp_obs = pv_airtemp$n_obs,
+  N_airtemp_miss = pv_airtemp$n_miss,
+  airtemp_obs_idx = pv_airtemp$obs_idx,
+  airtemp_miss_idx = pv_airtemp$miss_idx,
+  airtemp_obs = pv_airtemp$obs_vals,
+  imp_airtemp_mean = pv_airtemp$imp_mean, #nodes w/o parents impute from air_temp dis and not function
+  imp_airtemp_sd = pv_airtemp$imp_sd,
+  
   
   
 )
