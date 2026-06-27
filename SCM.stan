@@ -221,7 +221,13 @@ parameters {
   real b_zi_phyto;
   real b_zi_cyph;
   
-  
+  //Random effects 
+  //nested w/ farm/replicate
+  vector[J_farm] z_farm;
+  vector[J_replicate] z_replicate;
+  real<lower=0> sigma_farm;
+  real<lower=0> sigma_replicate;
+}
   
   
   
@@ -230,10 +236,6 @@ parameters {
   
 }
 
-
-//model structures
-
-//random effects
 
 //transformed params
 
