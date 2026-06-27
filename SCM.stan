@@ -229,15 +229,19 @@ parameters {
   real<lower=0> sigma_replicate;
 }
   
-  
-  
-  
-  
-  
-}
-
-
 //transformed params
+
+transformed parameters {
+  //this block will
+  //reconstruct vectors from the observed and imputed values
+  
+}  
+  
+  
+  
+
+
+
 
 //priors
 
