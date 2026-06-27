@@ -248,6 +248,41 @@ transformed parameters {
   vector[N] phyto;
   vector[N] cyphonautes;
   
+  //Root nodes
+  //air temp 
+  //combining
+  air_temp[airtemp_obs_idx] = airtemp_obs;
+  if (N_airtemp_miss > 0)
+  air_temp[airtemp_miss_idx] = airtemp_miss;
+  
+  //daylight
+  daylight[daylight_obs_idx] = daylight_obs;
+  if (N_daylight_miss > 0) 
+  daylight[daylight_miss_idx] = daylight_miss;
+  
+  //current
+  current[current_obs_idx] = current_obs;
+  if (N_current_miss > 0) 
+  current[current_miss_idx] = current_miss;
+  
+  //precipitation
+  precip[precip_obs_idx] = precip_obs;
+  if (N_precip_miss > 0)
+  precip[precip_miss_idx] = precip_miss;
+  
+  //predatory zooplankton
+  pred_zoo[predzoo_obs_idx] = predzoo_obs;
+  if (N_predzoo_miss > 0)
+  pred_zoo[predzoo_miss_idx] = predzoo_miss;
+  
+  //Intermediate nodes
+  //no different
+  
+  
+  
+  
+  
+  
   
 }  
   
