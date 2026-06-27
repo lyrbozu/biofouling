@@ -212,7 +212,9 @@ stan_data <- list(
   do_sst = interv_grid,
   do_nutrients = interv_grid,
   do_seaweed = interv_grid,
-  do_phyto = interv_grid
+  do_phyto = interv_grid,
+  do_salinity = interv_grid,
+  do_cypho = interv_grid
 ) 
 ```
 
