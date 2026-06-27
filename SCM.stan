@@ -140,7 +140,31 @@ data {
   vector[N_interv] do_cypho;
 }
 
-//imputation section
+parameters {
+  
+  //Imputatiiiiiiiiooooooon
+  //root nodes are imputed by mean/sd
+  //intermediate nodes are imputed using their parent functions 
+  
+  //root nodes
+  vector[N_airtemp_miss] airtemp_miss;
+  vector[N_daylight_miss] daylight_miss;
+  vector[N_current_miss] current_miss;
+  vector[N_precip_miss] precip_miss;
+  vector[N_predzoo_miss] predzoo_miss;
+  
+  //Intermediate nodes (not orphans)
+  vector[N_sst_miss] sst_miss;
+  vector[N_sal_miss] sal_miss;
+  vector[N_nut_miss] nut_miss;
+  vector[N_seaweed_miss] seaweed_miss;
+  vector[N_phyto_miss] phyto_miss;
+  vector[N_cyph_miss] cyph_miss;
+  
+  
+  
+}
+
 
 //model structures
 
