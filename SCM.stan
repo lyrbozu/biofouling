@@ -356,6 +356,62 @@ model {
   sigma_farm ~ exponential(1);
   sigma_replicate ~ exponential(1);
   
+  //Priors for coefficients and their structural relationships
+  //Intermediate nodes only
+  //going to do weak priors for most things at the moment
+  
+  //SST
+  a_sst ~ normal(0.5, 0.4); //always at toip of vip plots, likely very impactful. fairly informative prior
+  b_sst_airtemp ~ normal(0,2); 
+  sigma_sst ~ exponential(1);
+  
+  //Salinity 
+  a_sal ~ normal(0,2);
+  b_sal_precip ~ normal(0,2);
+  sigma_sal ~ exponential(1);
+  
+  //Nutrients
+  a_nut ~ normal(0,2);
+  b_nut_sst ~ normal(0,2);
+  b_nut_current ~ normal(0,2);
+  b_nut_precip ~ normal(0,2);
+  sigma_nut ~ exponential(1);
+  
+  //Seaweed Growth 
+  a_seaweed ~ normal(0,2);
+  b_seaweed_sst ~ normal(0,2);
+  b_seaweed_nut ~ normal(0,2);
+  b_seaweed_daylight ~ normal(0.3, 0.5); //daylight v impactful when it appears i think
+  sigma_seaweed ~ exponential(1);
+  
+  // Phyto
+  a_phyto ~ normal(0,2);
+  b_phyto_sal ~ normal(0,2);
+  b_phyto_nut ~ normal(0,2);
+  b_phyto_daylight ~ normal(0.3, 0.5);
+  sigma_phyto ~ exponential(1);
+  
+  //Cyphonautes
+  a_cyph ~ normal(0,2); 
+  b_cyph_phyto ~ normal(0,2);
+  b_cyph_predzoo ~ normal(0,2);
+  b_cyph_current ~ normal(0,2);
+  sigma_cyph ~ exponential(1);
+  
+  //Biofouling
+  alpha_bf ~ normal(0,2);
+  b_bf_seaweed ~ normal(0,2);
+  b_bf_phyto ~ normal(0,2);
+  b_bf_cyph ~ normal(0,2);
+  phi ~ gamma(4, 0.1);
+  alpha_zi ~ normal(0,2);
+  b_zi_seaweed ~ normal(0,2);
+  b_zi_phyto ~ normal(0,2);
+  b_zi_cyph ~ normal(0,2);
+  
+  
+  
+  
 }
   
   
