@@ -229,15 +229,196 @@ parameters {
   real<lower=0> sigma_replicate;
 }
   
+//transformed params
+
+transformed parameters {
+  //this block will
+  //reconstruct vectors from the observed and imputed values
   
+  #assigning
+  vector[N] air_temp;
+  vector[N] daylight;
+  vector[N] current;
+  vector[N] precip;
+  vector[N] pred_zoo;
+  vector[N] sst;
+  vector[N] salinity;
+  vector[N] nutrients;
+  vector[N] seaweed;
+  vector[N] phyto;
+  vector[N] cyphonautes;
+  
+  //Root nodes
+  //air temp 
+  //combining
+  air_temp[airtemp_obs_idx] = airtemp_obs;
+  if (N_airtemp_miss > 0)
+  air_temp[airtemp_miss_idx] = airtemp_miss;
+  
+  //daylight
+  daylight[daylight_obs_idx] = daylight_obs;
+  if (N_daylight_miss > 0) 
+  daylight[daylight_miss_idx] = daylight_miss;
+  
+  //current
+  current[current_obs_idx] = current_obs;
+  if (N_current_miss > 0) 
+  current[current_miss_idx] = current_miss;
+  
+  //precipitation
+  precip[precip_obs_idx] = precip_obs;
+  if (N_precip_miss > 0)
+  precip[precip_miss_idx] = precip_miss;
+  
+  //predatory zooplankton
+  pred_zoo[predzoo_obs_idx] = predzoo_obs;
+  if (N_predzoo_miss > 0)
+  pred_zoo[predzoo_miss_idx] = predzoo_miss;
+  
+  //Intermediate nodes
+  //no different
+  
+  //sst
+  sst[sst_obs_idx] = sst_obs;
+  if (N_sst_miss > 0)
+  sst[sst_miss_idx] = sst_miss;
+  
+  //salinity 
+  salinity[sal_obs_idx] = sal_obs;
+  if (N_sal_miss > 0)
+  salinity[sal_miss_idx] = sal_miss;
+  
+  //nutrients
+  nutrients[nut_obs_idx] = nut_obs;
+  if (N_nut_miss > 0)
+  nutrients[nut_miss_idx] = nut_miss;
+  
+  //seaweed growth
+  seaweed[seaweed_obs_idx] = seaweed_obs;
+  if (N_seaweed_miss > 0)
+  seaweed[seaweed_miss_idx] = seaweed_miss;
+  
+  //phytoplankton abundance
+  phyto[phyto_obs_idx] = phyto_obs;
+  if (N_phyto_miss > 0 )
+  phyto[phyto_miss_idx] = phyto_miss;
+  
+  //cyphonautes
+  cyphonautes[cyph_obs_idx] = cyph_obs;
+  if (N_cyph_miss > 0)
+  cyphonautes[cyph_miss_idx] = cyph_miss;
+  
+  //Random effects 
+  //non centering
+  // noise * variation = farm units
+  vector[J_farm] u_farm = sigma_farm * z_farm;
+  vector[J_replicate] u_replicate = sigma_replicate * z_replicate;
+  
+}
+
+  
+  
+model {
+  
+  real eps = 1e-6; //no 0
+  
+  //Priors
+  //need priors for - 
+  //root node imputations
+  //random effects
+  // actual coefficient priors
+  
+  //root node imputation priors 
+  
+  //air temp
+  if (N_airtemp_miss > 0)
+  airtemp_miss ~ normal(imp_airtemp_mean, imp_airtemp_sd);
+  
+  //daylight
+  if (N_daylight_miss > 0)
+  daylight_miss ~ normal(imp_daylight_mean, imp_daylight_sd);
+  
+  //current 
+  if (N_current_miss > 0)
+  current_miss ~normal(imp_current_mean, imp_current_sd);
+  
+  //precipitation
+  if (N_precip_miss > 0)
+  precip_miss ~ normal(imp_precip_mean, imp_precip_sd);
+  
+  //predatory zooplankton
+  if (N_predzoo_miss > 0)
+  predzoo_miss ~ normal(imp_predzoo_mean, imp_predzoo_sd);
+  
+  //Random effect priors
+  z_farm ~ std_normal();
+  z_replicate ~ std_normal();
+  sigma_farm ~ exponential(1);
+  sigma_replicate ~ exponential(1);
+  
+  //Priors for coefficients and their structural relationships
+  //Intermediate nodes only
+  //going to do weak priors for most things at the moment
+  
+  //SST
+  a_sst ~ normal(0.5, 0.4); //always at toip of vip plots, likely very impactful. fairly informative prior
+  b_sst_airtemp ~ normal(0,2); 
+  sigma_sst ~ exponential(1);
+  
+  //Salinity 
+  a_sal ~ normal(0,2);
+  b_sal_precip ~ normal(0,2);
+  sigma_sal ~ exponential(1);
+  
+  //Nutrients
+  a_nut ~ normal(0,2);
+  b_nut_sst ~ normal(0,2);
+  b_nut_current ~ normal(0,2);
+  b_nut_precip ~ normal(0,2);
+  sigma_nut ~ exponential(1);
+  
+  //Seaweed Growth 
+  a_seaweed ~ normal(0,2);
+  b_seaweed_sst ~ normal(0,2);
+  b_seaweed_nut ~ normal(0,2);
+  b_seaweed_daylight ~ normal(0.3, 0.5); //daylight v impactful when it appears i think
+  sigma_seaweed ~ exponential(1);
+  
+  // Phyto
+  a_phyto ~ normal(0,2);
+  b_phyto_sal ~ normal(0,2);
+  b_phyto_nut ~ normal(0,2);
+  b_phyto_daylight ~ normal(0.3, 0.5);
+  sigma_phyto ~ exponential(1);
+  
+  //Cyphonautes
+  a_cyph ~ normal(0,2); 
+  b_cyph_phyto ~ normal(0,2);
+  b_cyph_predzoo ~ normal(0,2);
+  b_cyph_current ~ normal(0,2);
+  sigma_cyph ~ exponential(1);
+  
+  //Biofouling
+  alpha_bf ~ normal(0,2);
+  b_bf_seaweed ~ normal(0,2);
+  b_bf_phyto ~ normal(0,2);
+  b_bf_cyph ~ normal(0,2);
+  phi ~ gamma(4, 0.1);
+  alpha_zi ~ normal(0,2);
+  b_zi_seaweed ~ normal(0,2);
+  b_zi_phyto ~ normal(0,2);
+  b_zi_cyph ~ normal(0,2);
   
   
   
   
 }
+  
+  
+  
 
 
-//transformed params
+
 
 //priors
 
