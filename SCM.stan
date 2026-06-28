@@ -893,6 +893,59 @@ model {
          }
          
          //Seaweed growth
+         {
+           real acc = 0;
+           for (n in 1:N) {
+             real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
+            //no downstream nodes connecting it to biofouling
+            //# awesome
+            
+            real p_occ = inv_logit(alpha_zi
+            + b_zi_seaweed * do_seaweed[k]
+            + b_zi_phyto * phyto[n]
+            + b_zi_cyph * cyphonautes[n]
+            + re);
+            
+            real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf + 
+            b_bf_seaweed * do_seaweed[k]
+            + b_bf_phyto * phyto[n] 
+            + b_zi_cyph * cyphonautes[n]
+            + re)));
+            
+            acc += p_occ * mu
+            }
+            Ey_do_seaweed[k] = acc/N;
+         }
+
+         //Phytoplankton
+         //only one downstream variable
+         { 
+           real acc = 0;
+           for(n in 1:N) {
+             real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
+             
+             //phytoplankton -> cyphonautes
+             real cyph_k = a_cyph 
+             + b_cyph_phyto * do_phyto[k]
+             + b_cyph_predzoo * pred_zoo[n]
+             + b_cyph_current * current[n];
+             
+             real p_occ = inv_logit(alpha_zi
+             + b_zi_seaweed * seaweed[n]
+             + b_zi_phyto * do_phyto[k]
+             + b_zi_cyph * cyph_k
+             + re);
+             
+             real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf
+             + b_bf_seaweed * seaweed[n]
+             + b_bf_phyto * do_phyto[k]
+             + b_bf_cyph * cyph_k
+             + re)));
+             
+             acc += p_occ * mu;
+           }
+           Ey_do_phyto[k] = acc/N;
+         }
          
        }
        
