@@ -684,7 +684,7 @@ model {
      {
        real acc = 0;
        for (n in 1:N) {
-         real re = u_farm[farm_n]] + u_replicate[replicate_id[n]];
+         real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
          
          //daylight -> seaweed
          real seaweed_k = a_seaweed
@@ -712,7 +712,7 @@ model {
          
          real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf
          + b_bf_seaweed * seaweed_k
-         + b_bf_phyto * phyto
+         + b_bf_phyto * phyto_k
          + b_bf_cyph * cyph_k
          + re)));
          
@@ -819,7 +819,7 @@ model {
              real seaweed_k = a_seaweed
              + b_seaweed_sst * do_sst[k]
              + b_seaweed_nut * nut_k
-             + b_seaweed_daylight * daylight[n]
+             + b_seaweed_daylight * daylight[n];
              
              //nutreitns -> phyto
              real phyto_k = a_phyto 
@@ -845,7 +845,7 @@ model {
              + b_bf_cyph * cyph_k
              + re)));
              
-             acc += p_occ * mu
+             acc += p_occ * mu;
              }
              Ey_do_sst[k] = acc/N;
          }
@@ -912,7 +912,7 @@ model {
             + b_zi_cyph * cyphonautes[n]
             + re)));
             
-            acc += p_occ * mu
+            acc += p_occ * mu;
             }
             Ey_do_seaweed[k] = acc/N;
          }
@@ -999,7 +999,7 @@ model {
                real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf 
                +  b_bf_seaweed * seaweed[n]
                + b_bf_phyto * phyto[n]
-               + b_bf cyph * do_cyph[k] 
+               + b_bf_cyph * do_cypho[k] 
                + re)));
                
                acc += p_occ * mu;
