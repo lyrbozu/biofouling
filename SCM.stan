@@ -17,29 +17,8 @@ data {
   vector<lower=0, upper = 1>[N] biofouling;
   
   //Exposure nodes
-  //starting with nodes w/o parents
-  //root nodes
-  
-  //structure 
-  //number of observed vals 
-  //number of missing vals
-  //obs index
-  //miss index
-  //observed values
-  //imputation of mean
-  //imputation of sd
-  //same for all root nodes
-  
-  //Air temperature
-  int<lower=0> N_airtemp_obs;
-  int<lower=0> N_airtemp_miss;
-  array[N_airtemp_obs] int airtemp_obs_idx;
-  array[N_airtemp_miss] int airtemp_miss_idx;
-  vector[N_airtemp_obs] airtemp_obs;
-  real imp_airtemp_mean;
-  real <lower=0> imp_airtemp_sd;
-  
-  //Daylight
+  //Root nodes: daylight, current, precipitation, predatory zooplankton
+  //Intermediate nodes include air_temp (daylight -> air_temp -> sst ...)
   int<lower=0> N_daylight_obs;
   int<lower=0> N_daylight_miss;
   array[N_daylight_obs] int daylight_obs_idx;
@@ -77,7 +56,12 @@ data {
   
   //non-root nodes
   
-  //structure same as root nodes w/o impute lines
+  //Air temperature (parent = daylight)
+  int<lower=0> N_airtemp_obs;
+  int<lower=0> N_airtemp_miss;
+  array[N_airtemp_obs] int airtemp_obs_idx;
+  array[N_airtemp_miss] int airtemp_miss_idx;
+  vector[N_airtemp_obs] airtemp_obs;
   
   //SST
   int<lower=0> N_sst_obs;
@@ -148,13 +132,13 @@ parameters {
   //intermediate nodes are imputed using their parent functions 
   
   //root nodes
-  vector[N_airtemp_miss] airtemp_miss;
   vector[N_daylight_miss] daylight_miss;
   vector[N_current_miss] current_miss;
   vector[N_precip_miss] precip_miss;
   vector[N_predzoo_miss] predzoo_miss;
   
   //Intermediate nodes (not orphans)
+  vector[N_airtemp_miss] airtemp_miss;
   vector[N_sst_miss] sst_miss;
   vector[N_sal_miss] sal_miss;
   vector[N_nut_miss] nut_miss;
@@ -165,15 +149,20 @@ parameters {
   //defining model structures
   //only for intermediate nodes
   
+  //Air temperature parent = daylight
+  real a_airtemp;
+  real b_airtemp_daylight;
+  real<lower=1e-3> sigma_airtemp;
+  
   //SST parent = airtemp
   real a_sst;
   real b_sst_airtemp;
-  real<lower=0> sigma_sst;
+  real<lower=1e-3> sigma_sst;
   
   //Salinity parent = precipitation
   real a_sal;
   real b_sal_precip;
-  real<lower=0> sigma_sal;
+  real<lower=1e-3> sigma_sal;
   
   //Nutrients 
   //parents = sst, current, precipitation
@@ -182,7 +171,7 @@ parameters {
   real b_nut_sst;
   real b_nut_current;
   real b_nut_precip;
-  real<lower=0> sigma_nut;
+  real<lower=1e-3> sigma_nut;
   
   //Seaweed growth 
   //parents = sst, nutrients, daylight
@@ -190,7 +179,7 @@ parameters {
   real b_seaweed_sst;
   real b_seaweed_nut;
   real b_seaweed_daylight;
-  real<lower=0> sigma_seaweed;
+  real<lower=1e-3> sigma_seaweed;
   
   //Phytoplankton
   //parents = salinity, nutrients, daylight
@@ -198,7 +187,7 @@ parameters {
   real b_phyto_sal;
   real b_phyto_nut;
   real b_phyto_daylight;
-  real<lower=0> sigma_phyto;
+  real<lower=1e-3> sigma_phyto;
   
   //Cyphonautes
   //parents = phytoplankton, predzoo, current
@@ -206,7 +195,7 @@ parameters {
   real b_cyph_phyto;
   real b_cyph_predzoo;
   real b_cyph_current;
-  real<lower=0> sigma_cyph;
+  real<lower=1e-3> sigma_cyph;
   
   //Biofouling
   //parents = seaweed, phytoplankton, cyphonautes
@@ -250,16 +239,9 @@ transformed parameters {
   vector[N] cyphonautes;
   
   //Root nodes
-  //air temp 
-  //combining
-  air_temp[airtemp_obs_idx] = airtemp_obs;
-  if (N_airtemp_miss > 0)
-  air_temp[airtemp_miss_idx] = airtemp_miss;
-  
-  //daylight
   daylight[daylight_obs_idx] = daylight_obs;
-  if (N_daylight_miss > 0) 
-  daylight[daylight_miss_idx] = daylight_miss;
+  if (N_daylight_miss > 0)
+    daylight[daylight_miss_idx] = daylight_miss;
   
   //current
   current[current_obs_idx] = current_obs;
@@ -277,7 +259,9 @@ transformed parameters {
   pred_zoo[predzoo_miss_idx] = predzoo_miss;
   
   //Intermediate nodes
-  //no different
+  air_temp[airtemp_obs_idx] = airtemp_obs;
+  if (N_airtemp_miss > 0)
+    air_temp[airtemp_miss_idx] = airtemp_miss;
   
   //sst
   sst[sst_obs_idx] = sst_obs;
@@ -329,11 +313,7 @@ model {
   //random effects
   // actual coefficient priors
   
-  //root node imputation priors 
-  
-  //air temp
-  if (N_airtemp_miss > 0)
-  airtemp_miss ~ normal(imp_airtemp_mean, imp_airtemp_sd);
+  //root node imputation priors (marginal for exogenous nodes only)
   
   //daylight
   if (N_daylight_miss > 0)
@@ -358,12 +338,15 @@ model {
   sigma_replicate ~ exponential(1);
   
   //Priors for coefficients and their structural relationships
-  //Intermediate nodes only
-  //going to do weak priors for most things at the moment
+  
+  //Air temperature
+  a_airtemp ~ normal(0, 2);
+  b_airtemp_daylight ~ normal(0.3, 0.5);
+  sigma_airtemp ~ exponential(1);
   
   //SST
-  a_sst ~ normal(0.5, 0.4); //always at toip of vip plots, likely very impactful. fairly informative prior
-  b_sst_airtemp ~ normal(0,2); 
+  a_sst ~ normal(0.5, 0.4);
+  b_sst_airtemp ~ normal(0, 2);
   sigma_sst ~ exponential(1);
   
   //Salinity 
@@ -412,102 +395,101 @@ model {
   
   
   //Structural equations
+  //Observed rows: likelihood on data; missing rows: imputation from parents
   
-  //SST
-  //parent only air temperature
-  sst ~ normal(a_sst + b_sst_airtemp * air_temp, sigma_sst);
+  //Air temperature (parent = daylight)
+  if (N_airtemp_obs > 0)
+    air_temp[airtemp_obs_idx] ~ normal(
+      a_airtemp + b_airtemp_daylight * daylight[airtemp_obs_idx],
+      sigma_airtemp);
+  if (N_airtemp_miss > 0)
+    airtemp_miss ~ normal(
+      a_airtemp + b_airtemp_daylight * daylight[airtemp_miss_idx],
+      sigma_airtemp);
   
-  //Salinity 
-  //parent only precipitation
-  salinity ~ normal(a_sal + b_sal_precip * precip, sigma_sal);
-  
-  //nutrients
-  //messy
-  // parents - sst + current + precipitation
-  nutrients ~ normal(
-    a_nut + 
-    b_nut_sst * sst + 
-    b_nut_current * current + 
-    b_nut_precip * precip, 
-    sigma_nut);
-    
-    //Seaweed growth
-    // parents - sst + nutrients + daylight
-    seaweed ~ normal(
-      a_seaweed + 
-      b_seaweed_sst * sst + 
-      b_seaweed_nut * nutrients + 
-      b_seaweed_daylight * daylight, 
-      sigma_seaweed);
-      
-      //Phytoplankton 
-      //parents - Salinity + nutrients + daylight
-      phyto ~ normal(
-        a_phyto + 
-        b_phyto_sal * salinity + 
-        b_phyto_nut * nutrients +  
-        b_phyto_daylight * daylight, 
-        sigma_phyto);
-        
-        //Cyphonautes
-        //parents - phytoplankton + predatory zooplankton + current
-        cyphonautes ~ normal(
-          a_cyph + 
-          b_cyph_phyto * phyto + 
-          b_cyph_predzoo * pred_zoo + 
-          b_cyph_current * current, 
-          sigma_cyph);
-          
-          
-//imputation for intermediate nodes
-//uses functions to generate new values
-          
-  //sst 
+  //SST (parent = air temperature)
+  if (N_sst_obs > 0)
+    sst[sst_obs_idx] ~ normal(
+      a_sst + b_sst_airtemp * air_temp[sst_obs_idx],
+      sigma_sst);
   if (N_sst_miss > 0)
-  sst_miss ~ normal(
-    a_sst + b_sst_airtemp * air_temp[sst_miss_idx],
-    sigma_sst);
-    
-  //salinity
+    sst_miss ~ normal(
+      a_sst + b_sst_airtemp * air_temp[sst_miss_idx],
+      sigma_sst);
+  
+  //Salinity (parent = precipitation)
+  if (N_sal_obs > 0)
+    salinity[sal_obs_idx] ~ normal(
+      a_sal + b_sal_precip * precip[sal_obs_idx],
+      sigma_sal);
   if (N_sal_miss > 0)
-  sal_miss ~ normal(
-    a_sal + b_sal_precip * precip[sal_miss_idx],
-    sigma_sal);
-    
-  //Nutrients
+    sal_miss ~ normal(
+      a_sal + b_sal_precip * precip[sal_miss_idx],
+      sigma_sal);
+  
+  //Nutrients (parents = sst, current, precipitation)
+  if (N_nut_obs > 0)
+    nutrients[nut_obs_idx] ~ normal(
+      a_nut
+      + b_nut_sst * sst[nut_obs_idx]
+      + b_nut_current * current[nut_obs_idx]
+      + b_nut_precip * precip[nut_obs_idx],
+      sigma_nut);
   if (N_nut_miss > 0)
-  nut_miss ~ normal(
-    a_nut + b_nut_sst * sst[nut_miss_idx]
-    + b_nut_current * current[nut_miss_idx]
-    + b_nut_precip * precip[nut_miss_idx],
-    sigma_nut);
-    
-    //Seaweed growth
-    if (N_seaweed_miss > 0)
+    nut_miss ~ normal(
+      a_nut
+      + b_nut_sst * sst[nut_miss_idx]
+      + b_nut_current * current[nut_miss_idx]
+      + b_nut_precip * precip[nut_miss_idx],
+      sigma_nut);
+  
+  //Seaweed growth (parents = sst, nutrients, daylight)
+  if (N_seaweed_obs > 0)
+    seaweed[seaweed_obs_idx] ~ normal(
+      a_seaweed
+      + b_seaweed_sst * sst[seaweed_obs_idx]
+      + b_seaweed_nut * nutrients[seaweed_obs_idx]
+      + b_seaweed_daylight * daylight[seaweed_obs_idx],
+      sigma_seaweed);
+  if (N_seaweed_miss > 0)
     seaweed_miss ~ normal(
-      a_seaweed + 
-      b_seaweed_sst * sst[seaweed_miss_idx]
+      a_seaweed
+      + b_seaweed_sst * sst[seaweed_miss_idx]
       + b_seaweed_nut * nutrients[seaweed_miss_idx]
       + b_seaweed_daylight * daylight[seaweed_miss_idx],
       sigma_seaweed);
-      
-      //Phytoplankton
-      if (N_phyto_miss > 0)
-      phyto_miss ~ normal(
-        a_phyto + 
-        b_phyto_sal * salinity[phyto_miss_idx] 
-        + b_phyto_nut * nutrients[phyto_miss_idx] 
-        + b_phyto_daylight * daylight[phyto_miss_idx],
-        sigma_phyto);
-        
-        //Cyphonautes
-        if (N_cyph_miss > 0)
-        cyph_miss ~ normal(
-          a_cyph
-          + b_cyph_phyto * phyto[cyph_miss_idx]
-          + b_cyph_predzoo * pred_zoo[cyph_miss_idx]
-          + b_cyph_current * current[cyph_miss_idx],
-          sigma_cyph);
+  
+  //Phytoplankton (parents = salinity, nutrients, daylight)
+  if (N_phyto_obs > 0)
+    phyto[phyto_obs_idx] ~ normal(
+      a_phyto
+      + b_phyto_sal * salinity[phyto_obs_idx]
+      + b_phyto_nut * nutrients[phyto_obs_idx]
+      + b_phyto_daylight * daylight[phyto_obs_idx],
+      sigma_phyto);
+  if (N_phyto_miss > 0)
+    phyto_miss ~ normal(
+      a_phyto
+      + b_phyto_sal * salinity[phyto_miss_idx]
+      + b_phyto_nut * nutrients[phyto_miss_idx]
+      + b_phyto_daylight * daylight[phyto_miss_idx],
+      sigma_phyto);
+  
+  //Cyphonautes (parents = phytoplankton, predatory zooplankton, current)
+  if (N_cyph_obs > 0)
+    cyphonautes[cyph_obs_idx] ~ normal(
+      a_cyph
+      + b_cyph_phyto * phyto[cyph_obs_idx]
+      + b_cyph_predzoo * pred_zoo[cyph_obs_idx]
+      + b_cyph_current * current[cyph_obs_idx],
+      sigma_cyph);
+  if (N_cyph_miss > 0)
+    cyph_miss ~ normal(
+      a_cyph
+      + b_cyph_phyto * phyto[cyph_miss_idx]
+      + b_cyph_predzoo * pred_zoo[cyph_miss_idx]
+      + b_cyph_current * current[cyph_miss_idx],
+      sigma_cyph);
           
   //Biofouling zero inflated beta regression
   //mixture model 
@@ -686,19 +668,27 @@ model {
        for (n in 1:N) {
          real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
          
-         //daylight -> seaweed
+         // daylight -> air temp -> sst -> nutrients
+         real airtemp_k = a_airtemp + b_airtemp_daylight * do_daylight[k];
+         real sst_k = a_sst + b_sst_airtemp * airtemp_k;
+         real nut_k = a_nut
+         + b_nut_sst * sst_k
+         + b_nut_current * current[n]
+         + b_nut_precip * precip[n];
+         
+         // daylight -> seaweed (direct and via sst/nutrients)
          real seaweed_k = a_seaweed
-         + b_seaweed_sst * sst[n]
-         + b_seaweed_nut * nutrients[n]
+         + b_seaweed_sst * sst_k
+         + b_seaweed_nut * nut_k
          + b_seaweed_daylight * do_daylight[k];
          
-         //Daylight -> phytoplankton
-         real phyto_k = a_phyto 
+         // daylight -> phytoplankton (direct and via nutrients)
+         real phyto_k = a_phyto
          + b_phyto_sal * salinity[n]
-         + b_phyto_nut * nutrients[n]
+         + b_phyto_nut * nut_k
          + b_phyto_daylight * do_daylight[k];
          
-         //phyto cyphonautes
+         // phyto -> cyphonautes
          real cyph_k = a_cyph
          + b_cyph_phyto * phyto_k
          + b_cyph_predzoo * pred_zoo[n]
@@ -909,7 +899,7 @@ model {
             real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf + 
             b_bf_seaweed * do_seaweed[k]
             + b_bf_phyto * phyto[n] 
-            + b_zi_cyph * cyphonautes[n]
+            + b_bf_cyph * cyphonautes[n]
             + re)));
             
             acc += p_occ * mu;
