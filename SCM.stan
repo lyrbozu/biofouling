@@ -684,7 +684,7 @@ model {
      {
        real acc = 0;
        for (n in 1:N) {
-         real re = u_farm[farm_n]] + u_replicate[replicate_id[n]];
+         real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
          
          //daylight -> seaweed
          real seaweed_k = a_seaweed
@@ -712,7 +712,7 @@ model {
          
          real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf
          + b_bf_seaweed * seaweed_k
-         + b_bf_phyto * phyto
+         + b_bf_phyto * phyto_k
          + b_bf_cyph * cyph_k
          + re)));
          
@@ -819,7 +819,7 @@ model {
              real seaweed_k = a_seaweed
              + b_seaweed_sst * do_sst[k]
              + b_seaweed_nut * nut_k
-             + b_seaweed_daylight * daylight[n]
+             + b_seaweed_daylight * daylight[n];
              
              //nutreitns -> phyto
              real phyto_k = a_phyto 
@@ -845,14 +845,170 @@ model {
              + b_bf_cyph * cyph_k
              + re)));
              
-             acc += p_occ * mu
+             acc += p_occ * mu;
              }
              Ey_do_sst[k] = acc/N;
          }
          
          //Nutrients
          
-       }
+         {
+           real acc = 0;
+           for (n in 1:N) {
+             real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
+             
+             //nutrients -> seaweed
+             real seaweed_k = a_seaweed
+             + b_seaweed_sst * sst[n]
+             + b_seaweed_nut * do_nutrients[k]
+             + b_seaweed_daylight * daylight[n];
+             
+             //nutrients -> phytoplankton
+             real phyto_k =  a_phyto
+             + b_phyto_sal * salinity[n]
+             + b_phyto_nut * do_nutrients[k]
+             + b_phyto_daylight * daylight[n];
+             
+             //phytoplankton -> cyphonautes
+             real cyph_k = a_cyph 
+             + b_cyph_phyto * phyto_k
+             + b_cyph_predzoo * pred_zoo[n]
+             + b_cyph_current * current[n];
+             
+             real p_occ = inv_logit(alpha_zi 
+             + b_zi_seaweed * seaweed_k
+             + b_zi_phyto * phyto_k
+             + b_zi_cyph * cyph_k
+             + re);
+             
+             real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf
+             + b_bf_seaweed * seaweed_k
+             + b_bf_phyto * phyto_k
+             + b_bf_cyph * cyph_k
+             + re)));
+             
+             acc += p_occ * mu;
+           }
+           Ey_do_nutrients[k] = acc/N;
+         }
+         
+         //Seaweed growth
+         {
+           real acc = 0;
+           for (n in 1:N) {
+             real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
+            //no downstream nodes connecting it to biofouling
+            //# awesome
+            
+            real p_occ = inv_logit(alpha_zi
+            + b_zi_seaweed * do_seaweed[k]
+            + b_zi_phyto * phyto[n]
+            + b_zi_cyph * cyphonautes[n]
+            + re);
+            
+            real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf + 
+            b_bf_seaweed * do_seaweed[k]
+            + b_bf_phyto * phyto[n] 
+            + b_zi_cyph * cyphonautes[n]
+            + re)));
+            
+            acc += p_occ * mu;
+            }
+            Ey_do_seaweed[k] = acc/N;
+         }
+
+         //Phytoplankton
+         //only one downstream variable
+         { 
+           real acc = 0;
+           for(n in 1:N) {
+             real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
+             
+             //phytoplankton -> cyphonautes
+             real cyph_k = a_cyph 
+             + b_cyph_phyto * do_phyto[k]
+             + b_cyph_predzoo * pred_zoo[n]
+             + b_cyph_current * current[n];
+             
+             real p_occ = inv_logit(alpha_zi
+             + b_zi_seaweed * seaweed[n]
+             + b_zi_phyto * do_phyto[k]
+             + b_zi_cyph * cyph_k
+             + re);
+             
+             real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf
+             + b_bf_seaweed * seaweed[n]
+             + b_bf_phyto * do_phyto[k]
+             + b_bf_cyph * cyph_k
+             + re)));
+             
+             acc += p_occ * mu;
+           }
+           Ey_do_phyto[k] = acc/N;
+         }
+         
+         // salinity
+         { 
+           real acc = 0;
+           for (n in 1:N) {
+             real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
+             
+             //salinity -> phytoplankton
+             real phyto_k = a_phyto
+             + b_phyto_sal * do_salinity[k]
+             + b_phyto_nut * nutrients[n]
+             + b_phyto_daylight * daylight[n];
+             
+             //phyto -> cyphonautes
+             real cyph_k = a_cyph
+             + b_cyph_phyto * phyto_k
+             + b_cyph_predzoo * pred_zoo[n]
+             + b_cyph_current * current[n];
+             
+             //biofoulin
+             real p_occ = inv_logit(alpha_zi
+             + b_zi_seaweed * seaweed[n]
+             + b_zi_phyto * phyto_k
+             + b_zi_cyph * cyph_k
+             + re);
+             
+             real mu = fmax(eps, fmin(1- eps, inv_logit(alpha_bf
+             + b_bf_seaweed * seaweed[n] 
+             + b_bf_phyto * phyto_k
+             + b_bf_cyph * cyph_k
+             + re)));
+             
+             acc += p_occ * mu;
+             }
+             Ey_do_salinity[k] = acc/N;
+             
+           }
+           
+           //Cyphonautes
+           //no downstream
+           {
+             real acc = 0;
+             for (n in 1:N) {
+               real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
+               real p_occ = inv_logit(alpha_zi
+               + b_zi_seaweed * seaweed[n]
+               + b_zi_phyto * phyto[n] 
+               + b_zi_cyph * do_cypho[k]
+               + re);
+               
+               real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf 
+               +  b_bf_seaweed * seaweed[n]
+               + b_bf_phyto * phyto[n]
+               + b_bf_cyph * do_cypho[k] 
+               + re)));
+               
+               acc += p_occ * mu;
+             }
+             Ey_do_cypho[k] = acc/N;
+           }
+         
+         
+       }// closes intervention section
        
    
 
