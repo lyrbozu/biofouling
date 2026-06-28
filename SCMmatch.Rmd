@@ -55,6 +55,13 @@ df <- df |>
                   air_temp, sst, daylight, salinity,
                   pred_zoo, precipitation, cyphonautes),
                 ~ scale(.)[,1]))
+
+df <- df |>
+  mutate(
+    farm_id      = as.integer(factor(farm)),
+    replicate_id = as.integer(factor(replicate))
+  )
+
 ```
 
 ```{r}
@@ -104,10 +111,10 @@ interv_grid <- seq(-1, 1, length.out = N_interv) #range of interventions
 stan_data <- list(
   N = nrow(df),
   #random effectss
-  J_farm = max(df$farm),
-  J_replicate = max(df$replicate),
-  farm_id    = as.integer(factor(df$farm)),
-  replicate_id = as.integer(factor(df$replicate)),
+  J_farm = max(df$farm_id),
+  J_replicate = max(df$replicate_id),
+  farm_id = df$farm_id,
+  replicate_id = df$replicate_id,
   
   #response
   biofouling = df$biofouling,
@@ -216,5 +223,27 @@ stan_data <- list(
   do_salinity = interv_grid,
   do_cypho = interv_grid
 ) 
+```
+
+
+**Compiling model**
+```{r}
+model <- cmdstan_model("SCM.stan")
+```
+**Fitting model**
+```{r}
+fit <- model$sample(
+  data = stan_data,
+  chains = 4,
+  parallel_chains = 4,
+  iter_warmup = 1000,
+  iter_sampling = 1000,
+  adapt_delta = 0.95,
+  max_treedepth = 12,
+  refresh = 100,
+  show_messages = TRUE
+)
+
+
 ```
 
