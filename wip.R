@@ -78,11 +78,11 @@ adj_registry <- list(
   list(exposure = "precipitation", estimand = "total",
        adj_vars = NULL),
   list(exposure = "precipitation", estimand = "direct",
-       adj_vars = c("seaweed_growth", "current", "phyto")),
+       adj_vars = c("seaweed_growth", "current", "salinity", "nutrients", "daylight")),
   
   # CYPHONAUTES
   list(exposure = "cyphonautes", estimand = "total",
        adj_vars = c("current", "phyto")),
   list(exposure = "cyphonautes", estimand = "direct",
-       adj_vars = c("current", "phyto"))
+       adj_vars = c("seaweed_growth", "phyto"))
 )
