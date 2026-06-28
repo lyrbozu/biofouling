@@ -8,6 +8,7 @@
 data {
   //Random effects
   int<lower=1> N;
+  int<lower=1> J_farm;
   int<lower=1> J_replicate;
   array[N] int<lower=1, upper=J_farm> farm_id;
   array[N] int<lower=1, upper=J_replicate> replicate_id;
@@ -63,13 +64,13 @@ data {
   array[N_precip_miss] int precip_miss_idx;
   vector[N_precip_obs] precip_obs;
   real imp_precip_mean;
-  real <lower=0> imp_current_sd;
+  real <lower=0> imp_precip_sd;
   
   //Predatory Zooplankton
   int<lower=0> N_predzoo_obs;
-  int<lower> N_predzoo_miss;
-  array[N_predzoo_obs] int precip_obs_idx;
-  array[N_predzoo_miss] int precip_miss_idx;
+  int<lower=0> N_predzoo_miss;
+  array[N_predzoo_obs] int predzoo_obs_idx;
+  array[N_predzoo_miss] int predzoo_miss_idx;
   vector[N_predzoo_obs] predzoo_obs;
   real imp_predzoo_mean;
   real<lower=0> imp_predzoo_sd;
@@ -235,7 +236,7 @@ transformed parameters {
   //this block will
   //reconstruct vectors from the observed and imputed values
   
-  #assigning
+  //assigning
   vector[N] air_temp;
   vector[N] daylight;
   vector[N] current;
@@ -464,11 +465,11 @@ model {
   //sst 
   if (N_sst_miss > 0)
   sst_miss ~ normal(
-    a_sal + b_sst_airtemp * air_temp[sst_miss_idx],
+    a_sst + b_sst_airtemp * air_temp[sst_miss_idx],
     sigma_sst);
     
   //salinity
-  if (N_salinity_miss > 0)
+  if (N_sal_miss > 0)
   sal_miss ~ normal(
     a_sal + b_sal_precip * precip[sal_miss_idx],
     sigma_sal);
@@ -552,7 +553,7 @@ model {
      real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
      real p_occ = inv_logit(alpha_zi + 
      b_zi_seaweed * seaweed[n]
-     + b_zi_phyto + phyto [n]
+     + b_zi_phyto * phyto[n]
      + b_zi_cyph * cyphonautes[n] 
      + re);
     
@@ -567,9 +568,8 @@ model {
     y_rep[n] = 0;
     
    }
- }      
-  
- //Interventions
+   
+   //Interventions
  vector[N_interv] Ey_do_airtemp;
  vector[N_interv] Ey_do_current;
  vector[N_interv] Ey_do_daylight;
@@ -579,13 +579,15 @@ model {
  vector[N_interv] Ey_do_nutrients;
  vector[N_interv] Ey_do_seaweed;
  vector[N_interv] Ey_do_phyto;
+ vector[N_interv] Ey_do_salinity;
+ vector[N_interv] Ey_do_cypho;
  
  for (k in 1:N_interv) { 
    
    //air temp
    
    { real acc = 0;
-   for n(n in 1:N) {
+   for (n in 1:N) {
      real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
      //propagating intervention through air temp paths
      //include parents (full structure of intermediate nodes)
@@ -630,16 +632,58 @@ model {
    Ey_do_airtemp[k] = acc / N;
    }
    
+   //current
+   
+   {real acc = 0;
+   for (n in 1:N) {
+     real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
+     //current -> nut
+     real nut_k = a_nut 
+     + b_nut_sst * sst[n]
+     + b_nut_current * do_current[k]
+     + b_nut_precip * precip[n];
+     //nutrients -> seaweed
+     real seaweed_k = a_seaweed 
+     + b_seaweed_sst * sst[n]
+     + b_seaweed_nut * nut_k
+     + b_seaweed_daylight * daylight[n];
+     //nutrients -> phyto 
+     real phyto_k = a_phyto 
+     + b_phyto_sal * salinity[n]
+     + b_phyto_nut * nut_k
+     + b_phyto_daylight * daylight[n];
+     //current/phyto -> cyphonautes
+     real cyph_k = a_cyph 
+     + b_cyph_phyto * phyto_k
+     + b_cyph_predzoo * pred_zoo[n]
+     + b_cyph_current * do_current[k];
+     
+     real p_occ = inv_logit(
+       alpha_zi
+       + b_zi_seaweed * seaweed_k
+       + b_zi_phyto * phyto_k
+       + b_zi_cyph * cyph_k
+       + re);
+       
+       real mu = fmax(eps, fmin(1- eps, inv_logit(
+         alpha_bf 
+         + b_bf_seaweed * seaweed_k
+         + b_bf_phyto * phyto_k
+         + b_bf_cyph * cyph_k
+         + re)));
+         
+         acc += p_occ * mu;
+   }
+     Ey_do_current[k] = acc/N;
+     }
    
    
-   } //block end
+ }      
+  
+} //block end
   
 
 
 
 
 
-
-
-//gcomp - will need to do one gcomp section per node
-//will follow same format so not too difficult
