@@ -1,0 +1,10 @@
+# CmdStan compiled model executables
+/SCM
+/daylight
+/daylightdirect
+
+# Saved MCMC fit objects (large; regenerate with run_scm_eval.R)
+*.rds
+
+# macOS
+.DS_Store
