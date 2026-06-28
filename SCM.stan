@@ -720,9 +720,63 @@ model {
        }
        Ey_do_daylight[k] = acc/N;
        }
+       
+       //Precipitation
+       {
+         real acc = 0;
+         for (n in 1:N) {
+           real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
+           
+           //precipitation -> salinity
+           real sal_k = a_sal 
+           + b_sal_precip * do_precip[k];
+           
+           //precipitation -> nutrients 
+           real nut_k = a_nut
+           + b_nut_sst * sst[n]
+           + b_nut_current * current[n]
+           + b_nut_precip * do_precip[k];
+          
+          //nutrients -> seaweed 
+          real seaweed_k = a_seaweed 
+          + b_seaweed_sst * sst[n]
+          + b_seaweed_nut * nut_k
+          + b_seaweed_daylight * daylight[n];
+          
+          //salinity + nutrients -> phytoplankton
+          real phyto_k = a_phyto 
+          + b_phyto_sal * sal_k
+          + b_phyto_nut * nut_k
+          + b_phyto_daylight * daylight[n];
+          
+          //phytoplankton -> cyphonautes 
+          real cyph_k = a_cyph 
+          + b_cyph_phyto * phyto_k
+          + b_cyph_predzoo * pred_zoo[n]
+          + b_cyph_current * current[n];
+          
+          real p_occ = inv_logit(alpha_zi
+          + b_zi_seaweed * seaweed_k
+          + b_zi_phyto * phyto_k
+          + b_zi_cyph * cyph_k + 
+          re);
+          
+          real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf 
+          + b_bf_seaweed * seaweed_k
+          + b_bf_phyto * phyto_k
+          + b_bf_cyph * cyph_k
+          + re)));
+          
+          acc += p_occ * mu;
+         }
+         Ey_do_precip[k] = acc/N;
+         }
+         
+         
+       }
+       
    
-   
- }      
+
   
 } //block end
   
