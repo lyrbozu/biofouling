@@ -947,7 +947,47 @@ model {
            Ey_do_phyto[k] = acc/N;
          }
          
-       }
+         // salinity
+         { 
+           real acc = 0;
+           for (n in 1:N) {
+             real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
+             
+             //salinity -> phytoplankton
+             real phyto_k = a_phyto
+             + b_phyto_sal * do_salinity[k]
+             + b_phyto_nut * nutrients[n]
+             + b_phyto_daylight * daylight[n];
+             
+             //phyto -> cyphonautes
+             real cyph_k = a_cyph
+             + b_cyph_phyto * phyto_k
+             + b_cyph_predzoo * pred_zoo[n]
+             + b_cyph_current * current[n];
+             
+             //biofoulin
+             real p_occ = inv_logit(alpha_zi
+             + b_zi_seaweed * seaweed[n]
+             + b_zi_phyto * phyto_k
+             + b_zi_cyph * cyph_k
+             + re);
+             
+             real mu = fmax(eps, fmin(1- eps, inv_logit(alpha_bf
+             + b_bf_seaweed * seaweed[n] 
+             + b_bf_phyto * phyto_k
+             + b_bf_cyph * cyph_k
+             + re)));
+             
+             acc += p_occ * mu;
+             }
+             Ey_do_salinity[k] = acc/N;
+             
+           }
+           
+           //Cyphonautes
+         
+         
+       }// closes intervention section
        
    
 
