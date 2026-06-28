@@ -985,6 +985,27 @@ model {
            }
            
            //Cyphonautes
+           //no downstream
+           {
+             real acc = 0;
+             for (n in 1:N) {
+               real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
+               real p_occ = inv_logit(alpha_zi
+               + b_zi_seaweed * seaweed[n]
+               + b_zi_phyto * phyto[n] 
+               + b_zi_cyph * do_cypho[k]
+               + re);
+               
+               real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf 
+               +  b_bf_seaweed * seaweed[n]
+               + b_bf_phyto * phyto[n]
+               + b_bf cyph * do_cyph[k] 
+               + re)));
+               
+               acc += p_occ * mu;
+             }
+             Ey_do_cypho[k] = acc/N;
+           }
          
          
        }// closes intervention section
