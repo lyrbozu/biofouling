@@ -570,6 +570,8 @@ model {
    }
    
    //Interventions
+   //interventions could change distributions of variables
+   //not sure that's something i need to care about
  vector[N_interv] Ey_do_airtemp;
  vector[N_interv] Ey_do_current;
  vector[N_interv] Ey_do_daylight;
@@ -676,6 +678,48 @@ model {
    }
      Ey_do_current[k] = acc/N;
      }
+     
+     //daylight
+     
+     {
+       real acc = 0;
+       for (n in 1:N) {
+         real re = u_farm[farm_n]] + u_replicate[replicate_id[n]];
+         
+         //daylight -> seaweed
+         real seaweed_k = a_seaweed
+         + b_seaweed_sst * sst[n]
+         + b_seaweed_nut * nutrients[n]
+         + b_seaweed_daylight * do_daylight[k];
+         
+         //Daylight -> phytoplankton
+         real phyto_k = a_phyto 
+         + b_phyto_sal * salinity[n]
+         + b_phyto_nut * nutrients[n]
+         + b_phyto_daylight * do_daylight[k];
+         
+         //phyto cyphonautes
+         real cyph_k = a_cyph
+         + b_cyph_phyto * phyto_k
+         + b_cyph_predzoo * pred_zoo[n]
+         + b_cyph_current * current[n];
+         
+         real p_occ = inv_logit(alpha_zi 
+         + b_zi_seaweed * seaweed_k
+         + b_zi_phyto * phyto_k
+         + b_zi_cyph * cyph_k
+         + re);
+         
+         real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf
+         + b_bf_seaweed * seaweed_k
+         + b_bf_phyto * phyto
+         + b_bf_cyph * cyph_k
+         + re)));
+         
+         acc += p_occ * mu;
+       }
+       Ey_do_daylight[k] = acc/N;
+       }
    
    
  }      
