@@ -772,6 +772,85 @@ model {
          Ey_do_precip[k] = acc/N;
          }
          
+         //Predatory zooplankton
+         
+         { real acc = 0;
+         for (n in 1:N) {
+           real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
+           
+           //predatory zooplankton -> cyphonautes
+           real cyph_k = a_cyph
+          + b_cyph_phyto * phyto[n] +
+          b_cyph_predzoo * do_predzoo[k]
+          + b_cyph_current * current[n];
+          
+          real p_occ = inv_logit(alpha_zi 
+          + b_zi_seaweed * seaweed[n]
+          + b_zi_phyto * phyto[n]
+          + b_zi_cyph * cyph_k
+          + re);
+          
+          real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf
+          + b_bf_seaweed * seaweed[n]
+          + b_bf_phyto * phyto[n]
+          + b_bf_cyph * cyph_k
+          + re)));
+          
+          acc += p_occ * mu;
+          
+         }
+         Ey_do_predzoo[k] = acc/N;
+         }
+         
+         //sst
+         //lots of paths
+         {
+           real acc = 0;
+           for (n in 1:N) {
+             real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
+             
+             //sst -> nutrients
+             real nut_k = a_nut
+             + b_nut_sst * do_sst[k]
+             + b_nut_current * current[n]
+             + b_nut_precip * precip[n];
+             
+             //sst + nutrients -> seaweed
+             real seaweed_k = a_seaweed
+             + b_seaweed_sst * do_sst[k]
+             + b_seaweed_nut * nut_k
+             + b_seaweed_daylight * daylight[n]
+             
+             //nutreitns -> phyto
+             real phyto_k = a_phyto 
+             + b_phyto_sal * salinity[n] //no effect from sst
+             + b_phyto_nut *  nut_k
+             + b_phyto_daylight * daylight[n];
+             
+             //phyto -> cyphonautes
+             real cyph_k = a_cyph
+             + b_cyph_phyto * phyto_k
+             + b_cyph_predzoo * pred_zoo[n]
+             + b_cyph_current * current[n];
+             
+             real p_occ = inv_logit(alpha_zi
+             + b_zi_seaweed * seaweed_k
+             + b_zi_phyto * phyto_k
+             + b_zi_cyph * cyph_k
+             + re);
+             
+             real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf
+             + b_bf_seaweed * seaweed_k 
+             + b_bf_phyto * phyto_k
+             + b_bf_cyph * cyph_k
+             + re)));
+             
+             acc += p_occ * mu
+             }
+             Ey_do_sst[k] = acc/N;
+         }
+         
+         //Nutrients
          
        }
        
