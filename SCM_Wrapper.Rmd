@@ -1,0 +1,836 @@
+### Corresponding Rmd for SCM.stan
+#### Started on 27/06/2026
+#### Authored by 2654492b
+
+=========================
+This script is the wrapper for the Stan structural causal model (SCM) of bryozoan biofouling on cultivated kelp. It: 
+  - Read and prepares the provided multi-farm dataset by selecting, renaming, and standardising the relevant predictors. 
+  - Prepares each covariate for missing-data imputation by splitting into observed/missing indices.
+  - Assembles stan data list
+  - Fits model via cmdstanr then runs convergence diagnostics and posterior predictive checks.
+  - Extracts structural path coefficients, total/direct causal contrasts, dose response curves, random effect SDs, and E-values.
+
+*Required Packages**
+```{r}
+#cmdstanr - interface used to compile/run stan model (SCM.stan)
+#posterior - for post convergence draws
+#tidyverse - general use package
+#patchwork - for combining multiple ggplot panels
+#bayesplot - for ppc plotting 
+#EValue - e value sensitivty analysis 
+
+library(cmdstanr)
+library(posterior)
+library(tidyverse)
+library(patchwork)
+library(bayesplot)
+library(ggplot2)
+library(EValue)
+
+```
+
+**Dataset**
+```{r}
+#fully merged multi-farm dataset w/ all variables aggregated from appropriate windows
+data <- read.csv("data.csv")
+df <- data
+```
+
+**By class**
+
+```{r}
+#Option chunk, only run if interested in taxonomic phytoplankton class.
+# inserts class level abundance rather than default total phytoplankton abundance
+# requires win_14, the 0-14 day dataset for the phytoplankton classes
+
+
+df <- df %>%
+  left_join(
+    win_14 %>%
+      select(
+        Identifier,
+    Bacillariophyceae,
+    Dinophyceae,
+    Dictyochophyceae,
+    Cryptophyceae,
+    Prymnesiophyceae,
+    Cyanophyceae
+      ),
+    by = "Identifier"
+  )
+
+```
+
+
+**Data prep**
+```{r}
+#Zero inflated beta likelihoods cannot handle of 1
+#Nudges non-zero values slightly off 1
+df <- df |>
+  mutate(biofouling = if_else(
+    biofouling == 0, 
+    0,                                             
+    (biofouling * (n() - 1) + 0.5) / n()           
+  ))
+
+#Original values recorded as percentages (0-100%), need to rescale to 0-1 for beta likelihood
+df$biofouling <- df$biofouling / 100
+
+--- #Assigning predictors ---
+
+#Combined predatory zooplankton from copepoda and arrow worms for a single exposure node
+df <- df %>%
+  mutate(pred_zoo = copepoda + arrow_worm)
+
+#Combined dissolve nutrient concentrations
+df <- df %>% 
+  mutate(nutrients =  NO2_um + NO3_um + PO4_um)
+#--Renaming names used by SCM--
+df <- df %>%
+  rename(current = current_velocity_w17) %>%
+  rename(seaweed_growth = blade_length) %>%
+  rename(salinity = Salinity) %>%
+  rename(precipitation = precipitation_mm_w17) %>%
+  rename(daylight = daylight_duration_h_w17) %>%
+  rename(sst = sea_surface_temperature_c_w17) %>%
+  rename(phyto = total_phytoplankton) %>% #change this to whatever phytoplankton class you want to check, otherwise leave as is
+  rename(cyphonautes = cyphonaute) %>%
+  rename(air_temp = avg_temp_w17) %>%
+  rename(winter_nut = winter_nutrient_avg)
+
+
+  
+```
+
+
+**Scaling Data**
+```{r}
+#standardising continous covariates
+#path coefficients on a comparable scale for intervention grid
+df <- df |>
+  mutate(across(c(nutrients, phyto, seaweed_growth, current,
+                  air_temp, sst, daylight, salinity,
+                  pred_zoo, precipitation, cyphonautes, winter_nut ),
+                ~ scale(.)[,1]))
+# Integer indices for random effect group levels
+df <- df |>
+  mutate(
+    farm_id      = as.integer(factor(farm)),
+    replicate_id = as.integer(factor(replicate))
+  )
+
+#Farm weighting
+#weight 1/n_farm then weights are rescaled to effective sample size
+df <- df |> 
+  group_by(farm) |>
+  mutate(farm_weight = 1/ n()) |>
+  ungroup()
+df <- df |>
+  mutate(farm_weight = farm_weight / sum(farm_weight) * n_distinct(farm))
+```
+
+**Prepping variables**
+```{r}
+#Splits each variable into its missing and observed values
+prep_var <- function(x) {
+  obs_idx  <- which(!is.na(x))
+  miss_idx <- which(is.na(x))
+  list(
+    n_obs    = length(obs_idx),
+    n_miss   = length(miss_idx),
+    obs_idx  = obs_idx,
+    miss_idx = miss_idx,
+    obs_vals = x[obs_idx],
+    imp_mean = mean(x, na.rm = TRUE),
+    imp_sd   = max(sd(x, na.rm = TRUE), 1e-3)
+  )
+}
+
+#posterior summary helper
+summary_effects <- function(x) {
+  c(
+    mean = mean(x),
+    sd = sd(x),
+    q2.5 = quantile(x, 0.025),
+    q97.5 = quantile(x, 0.975),
+    prob_pos = mean(x > 0)
+  )
+}
+
+#Pulls a vector-valued g-computation parameter out of fit and reshapes to do_value/mean/lo/hi dataframe for plotting
+ey_to_df <- function(fit, prefix, grid_values) {
+  vars <- paste0(prefix, "[", seq_along(grid_values), "]")
+  fit$summary(vars) |>
+    transmute(
+      do_value = grid_values,
+      mean = mean,
+      lo = q5,
+      hi = q95
+    )
+}
+
+#Proportion of exact zeros in a vector
+## PPC test statistic
+prop_zero <- function(x) mean(x == 0)
+
+```
+
+**'Preparing' Variables**
+```{r}
+# Applying prep-var() to every covariate 
+pv_airtemp <- prep_var(df$air_temp)
+pv_current <- prep_var(df$current)
+pv_daylight <- prep_var(df$daylight)
+pv_precip <- prep_var(df$precipitation)
+pv_predzoo <- prep_var(df$pred_zoo)
+pv_sst <- prep_var(df$sst)
+pv_sal <- prep_var(df$salinity)
+pv_nut <- prep_var(df$nutrients)
+pv_seaweed <- prep_var(df$seaweed_growth)
+pv_phyto <- prep_var(df$phyto)
+pv_cyph <- prep_var(df$cyphonautes)
+pv_winter_nut <- prep_var(df$winter_nut)
+```
+
+**Intervention grid**
+```{r}
+#grid of intervention values used for every do(X = x) query
+N_interv <- 11
+interv_grid <- seq(-1, 1, length.out = N_interv) #range of interventions
+```
+
+
+
+**Model datalist**
+```{r}
+
+#Full datalist to be passed to Stan
+stan_data <- list(
+  N = nrow(df),
+  #random effects
+  J_farm = max(df$farm_id),
+  J_replicate = max(df$replicate_id),
+  farm_id = df$farm_id,
+  replicate_id = df$replicate_id,
+  farm_weight = df$farm_weight, 
+  
+  #response
+  #zero-inflated beta response
+  biofouling = df$biofouling,
+  
+  #exposure nodes -
+  #starting w/ root nodes
+  
+  #Air Temperature (intermediate: daylight -> air_temp)
+  N_airtemp_obs = pv_airtemp$n_obs,
+  N_airtemp_miss = pv_airtemp$n_miss,
+  airtemp_obs_idx = pv_airtemp$obs_idx,
+  airtemp_miss_idx = pv_airtemp$miss_idx,
+  airtemp_obs = pv_airtemp$obs_vals,
+  
+  #winter nutrients
+  N_winternut_obs = pv_winter_nut$n_obs,
+  N_winternut_miss = pv_winter_nut$n_miss,
+  winternut_obs_idx = pv_winter_nut$obs_idx,
+  winternut_miss_idx = pv_winter_nut$miss_idx,
+  winternut_obs = pv_winter_nut$obs_vals,
+  imp_winternut_mean = pv_winter_nut$imp_mean,
+  imp_winternut_sd = pv_winter_nut$imp_sd,
+  
+  #winter nutrients
+  
+  
+  #Daylight (root node)
+  N_daylight_obs = pv_daylight$n_obs,
+  N_daylight_miss = pv_daylight$n_miss,
+  daylight_obs_idx = pv_daylight$obs_idx,
+  daylight_miss_idx = pv_daylight$miss_idx,
+  daylight_obs = pv_daylight$obs_vals,
+  imp_daylight_mean = pv_daylight$imp_mean,
+  imp_daylight_sd = pv_daylight$imp_sd,
+  
+  #Current
+  N_current_obs = pv_current$n_obs,
+  N_current_miss = pv_current$n_miss,
+  current_obs_idx = pv_current$obs_idx,
+  current_miss_idx = pv_current$miss_idx, 
+  current_obs = pv_current$obs_vals,
+  imp_current_mean = pv_current$imp_mean, 
+  imp_current_sd = pv_current$imp_sd,
+  
+  #Precipitation 
+  N_precip_obs = pv_precip$n_obs,
+  N_precip_miss = pv_precip$n_miss,
+  precip_obs_idx = pv_precip$obs_idx,
+  precip_miss_idx = pv_precip$miss_idx,
+  precip_obs = pv_precip$obs_vals, 
+  imp_precip_mean = pv_precip$imp_mean,
+  imp_precip_sd = pv_precip$imp_sd,
+  
+  #Predatory zooplankton
+  N_predzoo_obs = pv_predzoo$n_obs,
+  N_predzoo_miss = pv_predzoo$n_miss,
+  predzoo_obs_idx = pv_predzoo$obs_idx,
+  predzoo_miss_idx = pv_predzoo$miss_idx,
+  imp_predzoo_mean = pv_predzoo$imp_mean,
+  imp_predzoo_sd = pv_predzoo$imp_sd,
+  predzoo_obs = pv_predzoo$obs_vals,
+  
+  #Sea surface temperature 
+  N_sst_obs = pv_sst$n_obs,
+  N_sst_miss = pv_sst$n_miss,
+  sst_obs_idx = pv_sst$obs_idx,
+  sst_miss_idx = pv_sst$miss_idx,
+  sst_obs = pv_sst$obs_vals,
+  
+  #Salinity
+  N_sal_obs = pv_sal$n_obs,
+  N_sal_miss = pv_sal$n_miss,
+  sal_obs_idx = pv_sal$obs_idx,
+  sal_miss_idx = pv_sal$miss_idx,
+  sal_obs = pv_sal$obs_vals,
+  
+  #Nutrients - NO3 + NO2 + PO4
+  N_nut_obs = pv_nut$n_obs,
+  N_nut_miss = pv_nut$n_miss,
+  nut_obs_idx = pv_nut$obs_idx,
+  nut_miss_idx = pv_nut$miss_idx,
+  nut_obs = pv_nut$obs_vals,
+  
+  #Seaweed growth 
+  N_seaweed_obs = pv_seaweed$n_obs,
+  N_seaweed_miss = pv_seaweed$n_miss,
+  seaweed_obs_idx = pv_seaweed$obs_idx,
+  seaweed_miss_idx = pv_seaweed$miss_idx,
+  seaweed_obs = pv_seaweed$obs_vals,
+  
+  #Phytoplankton
+  N_phyto_obs = pv_phyto$n_obs,
+  N_phyto_miss = pv_phyto$n_miss,
+  phyto_obs_idx = pv_phyto$obs_idx,
+  phyto_miss_idx = pv_phyto$miss_idx,
+  phyto_obs = pv_phyto$obs_vals,
+  
+  #Cyphonautes
+  N_cyph_obs = pv_cyph$n_obs,
+  N_cyph_miss = pv_cyph$n_miss,
+  cyph_obs_idx = pv_cyph$obs_idx,
+  cyph_miss_idx = pv_cyph$miss_idx,
+  cyph_obs = pv_cyph$obs_vals,
+  
+  #Intervention grids - carrying over gcomp stuff from causal model
+  N_interv = N_interv,
+  do_airtemp = interv_grid,
+  do_current = interv_grid,
+  do_daylight = interv_grid,
+  do_precip = interv_grid,
+  do_predzoo = interv_grid,
+  do_sst = interv_grid,
+  do_nutrients = interv_grid,
+  do_seaweed = interv_grid,
+  do_phyto = interv_grid,
+  do_salinity = interv_grid,
+  do_cypho = interv_grid,
+  do_winternut = interv_grid
+) 
+```
+
+
+**Compiling model**
+```{r}
+#Compile stan program
+model <- cmdstan_model("SCMre.stan")
+```
+**Fitting model**
+```{r}
+fit <- model$sample(
+  data = stan_data,
+  chains = 4,
+  parallel_chains = 4,
+  iter_warmup = 2000,
+  iter_sampling = 5000,
+  adapt_delta = 0.95,
+  max_treedepth = 12,
+  refresh = 100,
+  show_messages = TRUE
+)
+
+```
+
+
+**Convergence diagnostics**
+```{r}
+#MCMC health checks
+# divergences
+#max rhat (< 1.01)
+# min ESS bulk (> 400)
+fit_summary <- fit$summary()
+fit_diag <- fit$sampler_diagnostics(format = "draws_df")
+
+tibble(
+  divergences = sum(fit_diag$divergent__ == 1, na.rm = TRUE),
+  max_rhat = max(fit_summary$rhat, na.rm = TRUE),
+  min_ess_bulk = min(fit_summary$ess_bulk, na.rm = TRUE),
+  n_bad_rhat = sum(fit_summary$rhat > 1.01, na.rm = TRUE),
+  n_low_ess = sum(fit_summary$ess_bulk < 400, na.rm = TRUE)
+)
+
+#If variables are problematic, which are they?
+fit_summary |>
+  filter(rhat > 1.01 | ess_bulk < 400) |>
+  arrange(desc(rhat)) |>
+  select(variable, mean, sd, rhat, ess_bulk) |>
+  head(20)
+```
+
+
+**Posterior predictive checks — SCM**
+```{r}
+#drawing y_rep and comparing against observed y to check model fit
+y_obs <- df$biofouling
+y_rep_mat <- fit$draws("y_rep", format = "matrix")
+y_rep_draws <- posterior::as_draws_matrix(fit$draws("y_rep"))
+n_ppc_draws <- min(50, nrow(y_rep_mat))
+
+
+# overall distribution check
+p_ppc_hist <- ppc_hist(
+  y = y_obs,
+  yrep = y_rep_mat[seq_len(n_ppc_draws), ]
+) +
+  labs(title = "SCM — posterior predictive histogram")
+
+#non-zero observations to check beta component shape
+nz_idx <- y_obs > 0
+p_ppc_dens <- ppc_dens_overlay(
+  y = y_obs[nz_idx],
+  yrep = y_rep_mat[seq_len(n_ppc_draws), nz_idx]
+) +
+  labs(title = "SCM — non-zero values only")
+
+#does the model reproduce the observed proportion of true zero?
+p_ppc_zero <- ppc_stat(y_obs, y_rep_draws, stat = prop_zero) +
+  labs(title = "SCM — proportion of zeros")
+
+#mean and SD reproduction
+p_ppc_mean_sd <- ppc_stat_2d(y_obs, y_rep_draws, stat = c("mean", "sd")) +
+  labs(title = "SCM — mean vs SD")
+
+p_ppc_hist / p_ppc_dens
+p_ppc_zero
+p_ppc_mean_sd
+```
+
+**Structural coefficients**
+```{r}
+#Main structural path coefficients
+fit$summary(c(
+  "b_airtemp_daylight", "b_sst_airtemp", "b_seaweed_daylight",
+  "b_phyto_daylight", "b_bf_phyto", "b_bf_seaweed", "b_bf_cyph",
+  "b_zi_seaweed", "sigma_farm", "phi", "b_phyto_winternut", "b_seaweed_winternut"
+)) |>
+  select(variable, mean, sd, rhat, ess_bulk)
+```
+**extracting gcomp summary**
+```{r}
+#Labels for each exposure, used in future plots
+exposure_map <- c(
+  airtemp   = "Air temperature",
+  current   = "Current",
+  daylight  = "Daylight",
+  precip    = "Precipitation",
+  predzoo   = "Pred. zooplankton",
+  sst       = "SST",
+  nutrients = "Nutrients",
+  seaweed   = "Seaweed growth",
+  phyto     = "Phytoplankton",
+  salinity  = "Salinity",
+  cypho     = "Cyphonautes",
+  winternut = "Winter nutrients"
+)
+#Extracting generated quantity Ey_do<exposure> 
+#forming mean + 95% CI at each grid point
+#total causal effect summary
+gcomp_summary <- imap_dfr(exposure_map, function(label, exp) {
+  param <- paste0("Ey_do_", exp)
+  draws <- fit$draws(param, format = "matrix")
+  map_dfr(seq_len(N_interv), function(k) {
+    col <- draws[, k]
+    tibble(
+      exposure = exp,
+      label    = label,
+      do_value = interv_grid[k],
+      Ey_mean  = mean(col),
+      Ey_lo    = quantile(col, 0.025),
+      Ey_hi    = quantile(col, 0.975)
+    )
+  })
+})
+```
+
+
+**Extracting contrast summaries**
+```{r}
+exposures <- c("airtemp", "current", "daylight", "precip",
+               "predzoo", "sst", "nutrients", "seaweed",
+               "phyto", "salinity", "cypho", "winternut")
+
+#Total causal effect of each exposure
+#contrast between top and bottom ends of intervention grid
+contrast_summary <- map_dfr(exposures, function(exp) {
+  param    <- paste0("Ey_do_", exp)
+  draws    <- fit$draws(param, format = "matrix")
+  contrast <- draws[, N_interv] - draws[, 1]
+  tibble(
+    exposure      = exp,
+    contrast_mean = mean(contrast),
+    contrast_lo   = quantile(contrast, 0.025),
+    contrast_hi   = quantile(contrast, 0.975),
+    prob_pos      = mean(contrast > 0)
+  )
+}) |>
+  distinct(exposure, .keep_all = TRUE)
+```
+
+**Direct Contrasts**
+```{r}
+#subset of exposures for which stan model also computes a _direct generated quantity for
+exposures_direct <- c("daylight", "current", "sst", "phyto")
+
+contrast_direct <- map_dfr(exposures_direct, function(exp) {
+  param    <- paste0("Ey_do_", exp, "_direct")
+  draws    <- fit$draws(param, format = "matrix")
+  contrast <- draws[, N_interv] - draws[, 1]
+  tibble(
+    exposure      = exp,
+    estimand      = "direct",
+    contrast_mean = mean(contrast),
+    contrast_lo   = quantile(contrast, 0.025),
+    contrast_hi   = quantile(contrast, 0.975),
+    prob_pos      = mean(contrast > 0)
+  )
+})
+```
+
+**Contrast Summary Graph**
+```{r}
+
+
+#Forest style plot of total causal contrasts for every exposure
+#Coloured by significant, grey = non significant, orange = significant. 
+contrast_summary |>
+  mutate(
+    sig = (contrast_lo > 0 | contrast_hi < 0),
+    exposure = recode(exposure,
+      airtemp   = "Air Temperature",
+      current   = "Current",
+      daylight  = "Daylight Hours",
+      precip    = "Precipitation",
+      predzoo   = "Pred. Zooplankton",
+      sst       = "SST",
+      nutrients = "Nutrients",
+      seaweed   = "Seaweed Growth",
+      phyto     = "Phytoplankton",
+      salinity  = "Salinity",
+      cypho     = "Cyphonautes",
+      winter_nut = "Winter Nutrients"
+    )
+  ) |>
+  ggplot(aes(x = contrast_mean * 100,
+             xmin = contrast_lo * 100,
+             xmax = contrast_hi * 100,
+             y = reorder(exposure, contrast_mean),
+             colour = sig)) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey50") +
+  geom_errorbar(height = 0.3) +
+  geom_point(size = 3) +
+  scale_colour_manual(values = c("grey60", "#D55E00"),
+                      labels = c("CI includes 0", "CI excludes 0")) +
+  labs(title  = "Total causal contrasts: do(X = +1SD) - do(X = −1SD)",
+       x      = "Change in expected % bryozoan cover (± 95% CI)",
+       y      = NULL,
+       colour = NULL) +
+  theme_bw(base_size = 12) +
+  theme(legend.position = "bottom")
+
+contrast_summary <- contrast_summary |>
+  distinct(exposure, .keep_all = TRUE)
+
+unique(contrast_summary$exposure)
+
+```
+
+**Total and direct effect summaries**
+```{r}
+
+#Combining total and direct effects for comparasion
+contrast_both <- bind_rows(
+  contrast_summary |>
+    filter(exposure %in% exposures_direct) |>
+    mutate(estimand = "total"),
+  contrast_direct
+) |>
+  mutate(
+    sig = (contrast_lo > 0 | contrast_hi < 0),
+    exposure = recode(exposure,
+      daylight = "Daylight Hours",
+      current  = "Current",
+      sst      = "SST",
+      phyto    = "Phytoplankton"
+    )
+  )
+
+ggplot(contrast_both,
+       aes(x = contrast_mean * 100,
+           xmin = contrast_lo * 100,
+           xmax = contrast_hi * 100,
+           y = exposure,
+           colour = estimand,
+           alpha = sig)) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey50") +
+  geom_errorbar(height = 0.25,
+                 position = position_dodge(width = 0.5)) +
+  geom_point(size = 3,
+             position = position_dodge(width = 0.5)) +
+  scale_colour_manual(values = c(direct = "#0072B2", total = "#E69F00")) +
+  scale_alpha_manual(values = c("FALSE" = 0.3, "TRUE" = 1),
+                     guide  = "none") +
+  labs(title   = "Total vs direct causal contrasts",
+       subtitle = "Difference = indirect effect through mediators",
+       x        = "Change in expected % cover (± 95% CI)",
+       y        = NULL,
+       colour   = "Estimand") +
+  theme_bw(base_size = 12) +
+  theme(legend.position = "bottom")
+
+
+
+```
+
+**Intervention curves — SCM (all exposures)**
+```{r}
+exposure_map <- c(
+  Ey_do_daylight = "Daylight",
+  Ey_do_airtemp = "Air temperature",
+  Ey_do_sst = "SST",
+  Ey_do_current = "Current",
+  Ey_do_precip = "Precipitation",
+  Ey_do_nutrients = "Nutrients",
+  Ey_do_seaweed = "Seaweed growth",
+  Ey_do_phyto = "Phytoplankton",
+  Ey_do_salinity = "Salinity",
+  Ey_do_predzoo = "Predatory zooplankton",
+  Ey_do_cypho = "Cyphonautes",
+  Ey_do_daylight_direct = "Direct Daylight",
+  Ey_do_current_direct = "Direct Current",
+  Ey_do_sst_direct = "Direct SST",
+  Ey_do_phyto_direct = "Phytoplankton Direct",
+  Ey_do_winternut = "Winter Nutrients"
+)
+
+#full dose-response table
+Ey_scm_all <- imap_dfr(exposure_map, \(label, prefix) {
+  ey_to_df(fit, prefix, interv_grid) |>
+    mutate(exposure = label)
+})
+
+#faceted dose-response curves
+#expected biofouling as function of intervention level
+#one panel per exposure
+p_interv_all <- ggplot(Ey_scm_all, aes(x = do_value, y = mean)) +
+  geom_ribbon(aes(ymin = lo, ymax = hi), alpha = 0.2) +
+  geom_line(linewidth = 0.8) +
+  facet_wrap(~exposure, scales = "free_y", ncol = 3) +
+  labs(
+    title = expression(SCM ~ E[Y * "|" * do(X)]),
+    x = "Intervention level (standardised)",
+    y = "Expected biofouling"
+  ) +
+  theme_bw()
+
+p_interv_all
+```
+
+**Pathways**
+```{r}
+# All path coefficients in the DAG
+path_params <- c(
+  # SST sub-model
+  "b_sst_airtemp",
+  # Salinity sub-model
+  "b_sal_precip",
+  # Nutrients sub-model
+  "b_nut_sst", "b_nut_current", "b_nut_precip", "b_nut_phyto",
+  # Seaweed sub-model
+  "b_seaweed_nut", "b_seaweed_daylight", "b_seaweed_winternut",
+  # Phyto sub-model
+  "b_phyto_sal", "b_phyto_winternut", "b_phyto_daylight",
+  # Cyphonautes sub-model
+  "b_cyph_phyto", "b_cyph_predzoo", "b_cyph_current",
+  # Biofouling intensity
+  "b_bf_seaweed", "b_bf_phyto", "b_bf_cyph",
+  # Biofouling occupancy
+  "b_zi_seaweed", "b_zi_phyto", "b_zi_cyph",
+  #air
+  "b_airtemp_daylight"
+)
+
+#posterior mean/sd/95% ci/ prob_pos for every path coefficient
+path_summary <- map_dfr(path_params, function(p) {
+  draws <- fit$draws(p, format = "matrix")
+  tibble(
+    parameter = p,
+    mean      = mean(draws),
+    sd        = sd(draws),
+    q2.5      = quantile(draws, 0.025),
+    q97.5     = quantile(draws, 0.975),
+    prob_pos  = mean(draws > 0)
+  )
+})
+
+
+
+```
+
+**Pathway summary graph**
+```{r}
+#classifies every path coefficient into its submodel for facetting 
+#relables as x -> y.
+#plots every coefficient as a forest plot faceted by submodel
+p_paths <- path_summary |>
+  mutate(
+    sig      = (q2.5 > 0 | q97.5 < 0),
+    submodel = case_when(
+      str_starts(parameter, "b_airtemp")  ~ "Air Temperature",
+      str_starts(parameter, "b_sst")      ~ "SST",
+      str_starts(parameter, "b_sal")      ~ "Salinity",
+      str_starts(parameter, "b_nut")      ~ "Nutrients",
+      str_starts(parameter, "b_seaweed")  ~ "Seaweed Growth",
+      str_starts(parameter, "b_phyto")    ~ "Phytoplankton",
+      str_starts(parameter, "b_cyph")     ~ "Cyphonautes",
+      str_starts(parameter, "b_bf")       ~ "Biofouling (Intensity)",
+      str_starts(parameter, "b_zi")       ~ "Biofouling (Occupancy)"
+    ),
+    submodel = factor(submodel, levels = c(
+      "Biofouling (Intensity)",
+      "Biofouling (Occupancy)",
+      "Cyphonautes",
+      "Nutrients",
+      "Phytoplankton",
+      "Salinity",
+      "Seaweed Growth",
+      "Air Temperature",
+      "SST"
+    )),
+    parameter = recode(parameter,
+      b_airtemp_daylight  = "Daylight → Air temp",
+      b_sst_airtemp       = "Air temp → SST",
+      b_sal_precip        = "Precipitation → Salinity",
+      b_nut_sst           = "SST → Nutrients",
+      b_nut_current       = "Current → Nutrients",
+      b_nut_precip        = "Precipitation → Nutrients",
+      b_seaweed_nut       = "Nutrients → Seaweed",
+      b_seaweed_daylight  = "Daylight → Seaweed",
+      b_phyto_sal         = "Salinity → Phyto",
+      b_phyto_nut         = "Nutrients → Phyto",
+      b_phyto_daylight    = "Daylight → Phyto",
+      b_cyph_phyto        = "Phytoplankton → Cyphonautes",
+      b_cyph_predzoo      = "Pred. zoo → Cyphonautes",
+      b_cyph_current      = "Current → Cyphonautes",
+      b_bf_seaweed        = "Seaweed → Biofouling",
+      b_bf_phyto          = "Phytoplankton → Biofouling",
+      b_bf_cyph           = "Cyphonautes → Biofouling",
+      b_zi_seaweed        = "Seaweed → Occupancy",
+      b_zi_phyto          = "Phytoplankton → Occupancy",
+      b_zi_cyph           = "Cyphonautes → Occupancy",
+      b_phyto_winternut   = "Winter Nutrients → Phytoplankton",
+      b_nut_phyto         = "Phytoplankton → Nutrients",
+      b_seaweed_winternut = "Winter Nutrients → Seaweed Growth"
+    )
+  ) |>
+  ggplot(aes(x = mean, xmin = q2.5, xmax = q97.5,
+             y = reorder(parameter, mean),
+             colour = sig)) +
+  geom_vline(xintercept = 0, linetype = "dashed", colour = "grey50") +
+  geom_errorbar(height = 0.3) +
+  geom_point(size = 2.5) +
+  facet_wrap(~submodel, scales = "free_y", ncol = 2) +
+  scale_colour_manual(values = c("grey60", "#D55E00"),
+                      labels = c("CI includes 0", "CI excludes 0")) +
+  labs(title   = "Structural path coefficients",
+       x       = "Posterior mean (± 95% CI)",
+       y       = NULL,
+       colour  = NULL) +
+  theme_bw(base_size = 11) +
+  theme(legend.position = "bottom")
+
+p_paths
+
+
+```
+
+**Random effect graphs**
+```{r}
+#posterior SDs of two random effect groups
+re_draws <- map_dfr(c("sigma_farm", "sigma_replicate"), function(p) {
+  draws <- fit$draws(p, format = "matrix")
+  tibble(
+    parameter = p,
+    mean      = mean(draws),
+    q2.5      = quantile(draws, 0.025),
+    q97.5     = quantile(draws, 0.975)
+  )
+}) |>
+  mutate(parameter = recode(parameter,
+    sigma_farm      = "Between-farm SD",
+    sigma_replicate = "Between-blade SD"
+  ))
+
+farm_re<- ggplot(re_draws,
+       aes(x = mean, xmin = q2.5, xmax = q97.5,
+           y = parameter)) +
+  geom_errorbarh(height = 0.2) +
+  geom_point(size = 3, colour = "steelblue") +
+  labs(title = "Random effect standard deviations",
+       x     = "Posterior mean (± 95% CI)",
+       y     = NULL) +
+  theme_bw(base_size = 12)
+
+
+```
+
+
+
+
+
+
+**E-values**
+```{r}
+#Sensitivity analysis
+#Evalues
+ev_rd <- gcomp_summary |>
+  group_by(exposure) |>
+  summarise(
+    Ey_lo = Ey_mean[which.min(do_value)],
+    Ey_hi = Ey_mean[which.max(do_value)],
+    .groups = "drop"
+  ) |>
+  mutate(
+    RD        = Ey_hi - Ey_lo,
+    RD_abs    = abs(RD),
+    Ey_mid    = (Ey_lo + Ey_hi) / 2,
+    RR_mid    = (Ey_mid + RD_abs/2) / pmax(Ey_mid - RD_abs/2, 1e-4),
+    RR_mid    = ifelse(RR_mid < 1, 1/RR_mid, RR_mid),
+    e_value   = ifelse(
+      RR_mid <= 1, 1,
+      RR_mid + sqrt(RR_mid * (RR_mid - 1))
+    ),
+    unstable  = Ey_lo < 0.005
+  ) |>
+  select(exposure, RD, Ey_mid, RR_mid, e_value, unstable)
+
+print(ev_rd)
+
+
+```
+

@@ -12,6 +12,7 @@ data {
   int<lower=1> J_replicate;
   array[N] int<lower=1, upper=J_farm> farm_id;
   array[N] int<lower=1, upper=J_replicate> replicate_id;
+  vector[N] farm_weight;
   
   //Response = biofouling
   vector<lower=0, upper = 1>[N] biofouling;
@@ -26,6 +27,15 @@ data {
   vector[N_daylight_obs] daylight_obs;
   real imp_daylight_mean;
   real <lower=0> imp_daylight_sd;
+  
+  //Winter nutrients
+  int<lower=0> N_winternut_obs;
+  int<lower=0> N_winternut_miss;
+  array[N_winternut_obs] int winternut_obs_idx;
+  array[N_winternut_miss] int winternut_miss_idx;
+  vector[N_winternut_obs] winternut_obs;
+  real imp_winternut_mean;
+  real <lower=0> imp_winternut_sd;
   
   //Current
   int<lower=0> N_current_obs;
@@ -123,11 +133,13 @@ data {
   vector[N_interv] do_phyto;
   vector[N_interv] do_salinity;
   vector[N_interv] do_cypho;
+  vector[N_interv] do_winternut;
+
 }
 
 parameters {
   
-  //Imputatiiiiiiiiooooooon
+  //Imputation
   //root nodes are imputed by mean/sd
   //intermediate nodes are imputed using their parent functions 
   
@@ -136,6 +148,7 @@ parameters {
   vector[N_current_miss] current_miss;
   vector[N_precip_miss] precip_miss;
   vector[N_predzoo_miss] predzoo_miss;
+  vector[N_winternut_miss] winternut_miss;
   
   //Intermediate nodes (not orphans)
   vector[N_airtemp_miss] airtemp_miss;
@@ -145,6 +158,7 @@ parameters {
   vector[N_seaweed_miss] seaweed_miss;
   vector[N_phyto_miss] phyto_miss;
   vector[N_cyph_miss] cyph_miss;
+  
   
   //defining model structures
   //only for intermediate nodes
@@ -165,28 +179,29 @@ parameters {
   real<lower=1e-3> sigma_sal;
   
   //Nutrients 
-  //parents = sst, current, precipitation
+  //parents = sst, current, precipitation, phytoplankton
   //stratification parents
   real a_nut;
   real b_nut_sst;
   real b_nut_current;
   real b_nut_precip;
+  real b_nut_phyto;
   real<lower=1e-3> sigma_nut;
   
   //Seaweed growth 
   //parents = sst, nutrients, daylight
   real a_seaweed;
-  real b_seaweed_sst;
   real b_seaweed_nut;
   real b_seaweed_daylight;
+  real b_seaweed_winternut;
   real<lower=1e-3> sigma_seaweed;
   
   //Phytoplankton
   //parents = salinity, nutrients, daylight
   real a_phyto;
   real b_phyto_sal;
-  real b_phyto_nut;
   real b_phyto_daylight;
+  real b_phyto_winternut;
   real<lower=1e-3> sigma_phyto;
   
   //Cyphonautes
@@ -237,11 +252,17 @@ transformed parameters {
   vector[N] seaweed;
   vector[N] phyto;
   vector[N] cyphonautes;
+  vector[N] winter_nutrients; 
   
   //Root nodes
   daylight[daylight_obs_idx] = daylight_obs;
   if (N_daylight_miss > 0)
     daylight[daylight_miss_idx] = daylight_miss;
+    
+   //winter nutrients
+   winter_nutrients[winternut_obs_idx] = winternut_obs;
+   if (N_winternut_miss > 0)
+   winter_nutrients[winternut_miss_idx] = winternut_miss;
   
   //current
   current[current_obs_idx] = current_obs;
@@ -319,6 +340,10 @@ model {
   if (N_daylight_miss > 0)
   daylight_miss ~ normal(imp_daylight_mean, imp_daylight_sd);
   
+  //winter nutrients
+  if (N_winternut_miss > 0)
+  winternut_miss ~ normal(imp_winternut_mean, imp_winternut_sd);
+  
   //current 
   if (N_current_miss > 0)
   current_miss ~normal(imp_current_mean, imp_current_sd);
@@ -363,15 +388,15 @@ model {
   
   //Seaweed Growth 
   a_seaweed ~ normal(0,2);
-  b_seaweed_sst ~ normal(0,2);
   b_seaweed_nut ~ normal(0,2);
-  b_seaweed_daylight ~ normal(0.3, 0.5); //daylight v impactful when it appears i think
+  b_seaweed_daylight ~ normal(1.0, 0.15); //daylight v impactful when it appears i think
+  b_seaweed_winternut ~ normal(0,2);
   sigma_seaweed ~ exponential(1);
   
   // Phyto
   a_phyto ~ normal(0,2);
   b_phyto_sal ~ normal(0,2);
-  b_phyto_nut ~ normal(0,2);
+  b_phyto_winternut ~ normal(0, 2);
   b_phyto_daylight ~ normal(0.3, 0.5);
   sigma_phyto ~ exponential(1);
   
@@ -433,48 +458,51 @@ model {
       a_nut
       + b_nut_sst * sst[nut_obs_idx]
       + b_nut_current * current[nut_obs_idx]
-      + b_nut_precip * precip[nut_obs_idx],
+      + b_nut_precip * precip[nut_obs_idx]
+      + b_nut_phyto   * phyto[nut_obs_idx],
       sigma_nut);
+      
   if (N_nut_miss > 0)
     nut_miss ~ normal(
       a_nut
       + b_nut_sst * sst[nut_miss_idx]
       + b_nut_current * current[nut_miss_idx]
-      + b_nut_precip * precip[nut_miss_idx],
+      + b_nut_precip * precip[nut_miss_idx]
+      + b_nut_phyto * phyto[nut_miss_idx],
       sigma_nut);
   
-  //Seaweed growth (parents = sst, nutrients, daylight)
-  if (N_seaweed_obs > 0)
-    seaweed[seaweed_obs_idx] ~ normal(
-      a_seaweed
-      + b_seaweed_sst * sst[seaweed_obs_idx]
-      + b_seaweed_nut * nutrients[seaweed_obs_idx]
-      + b_seaweed_daylight * daylight[seaweed_obs_idx],
-      sigma_seaweed);
-  if (N_seaweed_miss > 0)
-    seaweed_miss ~ normal(
-      a_seaweed
-      + b_seaweed_sst * sst[seaweed_miss_idx]
-      + b_seaweed_nut * nutrients[seaweed_miss_idx]
-      + b_seaweed_daylight * daylight[seaweed_miss_idx],
-      sigma_seaweed);
+  //Seaweed growth (parents = nutrients, daylight)
+if (N_seaweed_obs > 0)
+  seaweed[seaweed_obs_idx] ~ normal(
+    a_seaweed
+    + b_seaweed_nut * nutrients[seaweed_obs_idx]
+    + b_seaweed_daylight * daylight[seaweed_obs_idx]
+    + b_seaweed_winternut * winter_nutrients[seaweed_obs_idx],
+    sigma_seaweed);
+
+if (N_seaweed_miss > 0)
+  seaweed_miss ~ normal(
+    a_seaweed
+    + b_seaweed_nut * nutrients[seaweed_miss_idx]
+    + b_seaweed_daylight * daylight[seaweed_miss_idx]
+    + b_seaweed_winternut * winter_nutrients[seaweed_miss_idx],
+    sigma_seaweed);
   
   //Phytoplankton (parents = salinity, nutrients, daylight)
   if (N_phyto_obs > 0)
-    phyto[phyto_obs_idx] ~ normal(
-      a_phyto
-      + b_phyto_sal * salinity[phyto_obs_idx]
-      + b_phyto_nut * nutrients[phyto_obs_idx]
-      + b_phyto_daylight * daylight[phyto_obs_idx],
-      sigma_phyto);
+   phyto[phyto_obs_idx] ~ normal(
+    a_phyto
+    + b_phyto_sal        * salinity[phyto_obs_idx]
+    + b_phyto_daylight   * daylight[phyto_obs_idx]
+    + b_phyto_winternut  * winter_nutrients[phyto_obs_idx],
+  sigma_phyto);
   if (N_phyto_miss > 0)
-    phyto_miss ~ normal(
-      a_phyto
-      + b_phyto_sal * salinity[phyto_miss_idx]
-      + b_phyto_nut * nutrients[phyto_miss_idx]
-      + b_phyto_daylight * daylight[phyto_miss_idx],
-      sigma_phyto);
-  
+  phyto_miss ~ normal(
+    a_phyto
+    + b_phyto_sal        * salinity[phyto_miss_idx]
+    + b_phyto_winternut  * winter_nutrients[phyto_miss_idx]
+    + b_phyto_daylight   * daylight[phyto_miss_idx],
+    sigma_phyto);
   //Cyphonautes (parents = phytoplankton, predatory zooplankton, current)
   if (N_cyph_obs > 0)
     cyphonautes[cyph_obs_idx] ~ normal(
@@ -565,208 +593,227 @@ model {
  vector[N_interv] Ey_do_phyto;
  vector[N_interv] Ey_do_salinity;
  vector[N_interv] Ey_do_cypho;
+ vector[N_interv] Ey_do_daylight_direct;
+ vector[N_interv] Ey_do_current_direct;
+ vector[N_interv] Ey_do_sst_direct;
+ vector[N_interv] Ey_do_phyto_direct;
+ vector[N_interv] Ey_do_winternut;
+ 
  
  for (k in 1:N_interv) { 
    
    //air temp
    
-   { real acc = 0;
-   for (n in 1:N) {
-     real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
-     //propagating intervention through air temp paths
-     //include parents (full structure of intermediate nodes)
-     
-    //air temp -> sst
-    real sst_k = a_sst + b_sst_airtemp * do_airtemp[k];
-    
-    //sst -> nutrients 
-    real nut_k = a_nut + b_nut_sst * sst_k
-    + b_nut_current * current[n] 
-    + b_nut_precip * precip[n];
-    
-    //sst and nutrients -> seaweed
-    real seaweed_k = a_seaweed + b_seaweed_sst * sst_k
+  { real acc = 0;
+  for (n in 1:N) {
+  real re = 0;
+  
+  //air temp -> sst
+  real sst_k = a_sst + b_sst_airtemp * do_airtemp[k];
+  
+  //winter nutrients -> phytoplankton 
+  real phyto_k = a_phyto + b_phyto_sal * salinity[n]
+  + b_phyto_winternut * winter_nutrients[n]
+  + b_phyto_daylight * daylight[n];
+  
+  //sst + phyto -> nutrients
+  real nut_k = a_nut + b_nut_sst * sst_k
+  + b_nut_current * current[n] 
+  + b_nut_precip * precip[n]
+  + b_nut_phyto * phyto_k;
+  
+  //sst and nutrients -> seaweed
+  real seaweed_k =
+    a_seaweed
     + b_seaweed_nut * nut_k
-    + b_seaweed_daylight * daylight[n];
+    + b_seaweed_daylight * daylight[n]
+    + b_seaweed_winternut * winter_nutrients[n];
+  
+  //phyto -> cyphonautes
+  real cyph_k = a_cyph + b_cyph_phyto   * phyto_k
+                + b_cyph_predzoo * pred_zoo[n]
+                + b_cyph_current * current[n];
+                
+  real p_occ = inv_logit(alpha_zi
+    + b_zi_seaweed * seaweed_k
+    + b_zi_phyto   * phyto_k
+    + b_zi_cyph    * cyph_k
+    + re);
     
-    // nutrients -> phytoplankton
-    real phyto_k = a_phyto + b_phyto_sal * salinity[n]
-    + b_phyto_nut * nut_k
-    + b_phyto_daylight * daylight[n];
-    
-    //phyto -> cyphonautes
-    real cyph_k = a_cyph + b_cyph_phyto   * phyto_k
-                  + b_cyph_predzoo * pred_zoo[n]
-                  + b_cyph_current * current[n];
-                  
-    real p_occ = inv_logit(alpha_zi
-      + b_zi_seaweed * seaweed_k
-      + b_zi_phyto   * phyto_k
-      + b_zi_cyph    * cyph_k
-      + re);
-      
-      real mu = fmax(eps, fmin(1 - eps, inv_logit(
-      alpha_bf
-      + b_bf_seaweed * seaweed_k
-      + b_bf_phyto   * phyto_k
-      + b_bf_cyph    * cyph_k
-      + re)));
-    acc += p_occ * mu;
-   }
-   Ey_do_airtemp[k] = acc / N;
-   }
+    real mu = fmax(eps, fmin(1 - eps, inv_logit(
+    alpha_bf
+    + b_bf_seaweed * seaweed_k
+    + b_bf_phyto   * phyto_k
+    + b_bf_cyph    * cyph_k
+    + re)));
+  acc += p_occ * mu * farm_weight[n];
+}
+Ey_do_airtemp[k] = acc / sum(farm_weight);
+}
    
    //current
    
    {real acc = 0;
-   for (n in 1:N) {
-     real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
-     //current -> nut
-     real nut_k = a_nut 
-     + b_nut_sst * sst[n]
-     + b_nut_current * do_current[k]
-     + b_nut_precip * precip[n];
-     //nutrients -> seaweed
-     real seaweed_k = a_seaweed 
-     + b_seaweed_sst * sst[n]
-     + b_seaweed_nut * nut_k
-     + b_seaweed_daylight * daylight[n];
-     //nutrients -> phyto 
-     real phyto_k = a_phyto 
-     + b_phyto_sal * salinity[n]
-     + b_phyto_nut * nut_k
-     + b_phyto_daylight * daylight[n];
-     //current/phyto -> cyphonautes
-     real cyph_k = a_cyph 
-     + b_cyph_phyto * phyto_k
-     + b_cyph_predzoo * pred_zoo[n]
-     + b_cyph_current * do_current[k];
-     
-     real p_occ = inv_logit(
-       alpha_zi
-       + b_zi_seaweed * seaweed_k
-       + b_zi_phyto * phyto_k
-       + b_zi_cyph * cyph_k
-       + re);
-       
-       real mu = fmax(eps, fmin(1- eps, inv_logit(
-         alpha_bf 
-         + b_bf_seaweed * seaweed_k
-         + b_bf_phyto * phyto_k
-         + b_bf_cyph * cyph_k
-         + re)));
-         
-         acc += p_occ * mu;
-   }
-     Ey_do_current[k] = acc/N;
-     }
+for (n in 1:N) {
+  real re = 0;
+  
+  //winter nutrients -> phyto (unaffected by current)
+  real phyto_k = a_phyto 
+  + b_phyto_sal * salinity[n]
+  + b_phyto_winternut * winter_nutrients[n]
+  + b_phyto_daylight * daylight[n];
+  
+  //current + phyto -> nut
+  real nut_k = a_nut 
+  + b_nut_sst * sst[n]
+  + b_nut_current * do_current[k]
+  + b_nut_precip * precip[n]
+  + b_nut_phyto * phyto_k;
+  
+  //nutrients -> seaweed
+  real seaweed_k =
+    a_seaweed
+    + b_seaweed_nut * nut_k
+    + b_seaweed_daylight * daylight[n]
+    + b_seaweed_winternut * winter_nutrients[n];
+  
+  //current/phyto -> cyphonautes
+  real cyph_k = a_cyph 
+  + b_cyph_phyto * phyto_k
+  + b_cyph_predzoo * pred_zoo[n]
+  + b_cyph_current * do_current[k];
+  
+  real p_occ = inv_logit(
+    alpha_zi
+    + b_zi_seaweed * seaweed_k
+    + b_zi_phyto * phyto_k
+    + b_zi_cyph * cyph_k
+    + re);
+    
+    real mu = fmax(eps, fmin(1- eps, inv_logit(
+      alpha_bf 
+      + b_bf_seaweed * seaweed_k
+      + b_bf_phyto * phyto_k
+      + b_bf_cyph * cyph_k
+      + re)));
+      
+    acc += p_occ * mu * farm_weight[n];
+}
+  Ey_do_current[k] = acc / sum(farm_weight);
+  }
      
      //daylight
      
      {
-       real acc = 0;
-       for (n in 1:N) {
-         real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
-         
-         // daylight -> air temp -> sst -> nutrients
-         real airtemp_k = a_airtemp + b_airtemp_daylight * do_daylight[k];
-         real sst_k = a_sst + b_sst_airtemp * airtemp_k;
-         real nut_k = a_nut
-         + b_nut_sst * sst_k
-         + b_nut_current * current[n]
-         + b_nut_precip * precip[n];
-         
-         // daylight -> seaweed (direct and via sst/nutrients)
-         real seaweed_k = a_seaweed
-         + b_seaweed_sst * sst_k
-         + b_seaweed_nut * nut_k
-         + b_seaweed_daylight * do_daylight[k];
-         
-         // daylight -> phytoplankton (direct and via nutrients)
-         real phyto_k = a_phyto
-         + b_phyto_sal * salinity[n]
-         + b_phyto_nut * nut_k
-         + b_phyto_daylight * do_daylight[k];
-         
-         // phyto -> cyphonautes
-         real cyph_k = a_cyph
-         + b_cyph_phyto * phyto_k
-         + b_cyph_predzoo * pred_zoo[n]
-         + b_cyph_current * current[n];
-         
-         real p_occ = inv_logit(alpha_zi 
-         + b_zi_seaweed * seaweed_k
-         + b_zi_phyto * phyto_k
-         + b_zi_cyph * cyph_k
-         + re);
-         
-         real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf
-         + b_bf_seaweed * seaweed_k
-         + b_bf_phyto * phyto_k
-         + b_bf_cyph * cyph_k
-         + re)));
-         
-         acc += p_occ * mu;
-       }
-       Ey_do_daylight[k] = acc/N;
-       }
+  real acc = 0;
+  for (n in 1:N) {
+    real re = 0;
+    
+    // daylight -> air temp -> sst
+    real airtemp_k = a_airtemp + b_airtemp_daylight * do_daylight[k];
+    real sst_k = a_sst + b_sst_airtemp * airtemp_k;
+    
+    // daylight -> phytoplankton (winter_nutrients observed)
+    real phyto_k = a_phyto
+    + b_phyto_sal * salinity[n]
+    + b_phyto_winternut * winter_nutrients[n]
+    + b_phyto_daylight * do_daylight[k];
+    
+    // sst + phyto -> nutrients
+    real nut_k = a_nut
+    + b_nut_sst * sst_k
+    + b_nut_current * current[n]
+    + b_nut_precip * precip[n]
+    + b_nut_phyto * phyto_k;
+    
+    // daylight -> seaweed (direct and via sst/nutrients)
+    real seaweed_k =
+    a_seaweed
+    + b_seaweed_nut * nut_k
+    + b_seaweed_daylight * do_daylight[k]
+     + b_seaweed_winternut * winter_nutrients[n];
+    
+    // phyto -> cyphonautes
+    real cyph_k = a_cyph
+    + b_cyph_phyto * phyto_k
+    + b_cyph_predzoo * pred_zoo[n]
+    + b_cyph_current * current[n];
+    
+    real p_occ = inv_logit(alpha_zi 
+    + b_zi_seaweed * seaweed_k
+    + b_zi_phyto * phyto_k
+    + b_zi_cyph * cyph_k
+    + re);
+    
+    real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf
+    + b_bf_seaweed * seaweed_k
+    + b_bf_phyto * phyto_k
+    + b_bf_cyph * cyph_k
+    + re)));
+    
+    acc += p_occ * mu * farm_weight[n];
+  }
+  Ey_do_daylight[k] = acc / sum(farm_weight);
+  }
        
        //Precipitation
        {
-         real acc = 0;
-         for (n in 1:N) {
-           real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
-           
-           //precipitation -> salinity
-           real sal_k = a_sal 
-           + b_sal_precip * do_precip[k];
-           
-           //precipitation -> nutrients 
-           real nut_k = a_nut
-           + b_nut_sst * sst[n]
-           + b_nut_current * current[n]
-           + b_nut_precip * do_precip[k];
-          
-          //nutrients -> seaweed 
-          real seaweed_k = a_seaweed 
-          + b_seaweed_sst * sst[n]
-          + b_seaweed_nut * nut_k
-          + b_seaweed_daylight * daylight[n];
-          
-          //salinity + nutrients -> phytoplankton
-          real phyto_k = a_phyto 
-          + b_phyto_sal * sal_k
-          + b_phyto_nut * nut_k
-          + b_phyto_daylight * daylight[n];
-          
-          //phytoplankton -> cyphonautes 
-          real cyph_k = a_cyph 
-          + b_cyph_phyto * phyto_k
-          + b_cyph_predzoo * pred_zoo[n]
-          + b_cyph_current * current[n];
-          
-          real p_occ = inv_logit(alpha_zi
-          + b_zi_seaweed * seaweed_k
-          + b_zi_phyto * phyto_k
-          + b_zi_cyph * cyph_k + 
-          re);
-          
-          real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf 
-          + b_bf_seaweed * seaweed_k
-          + b_bf_phyto * phyto_k
-          + b_bf_cyph * cyph_k
-          + re)));
-          
-          acc += p_occ * mu;
-         }
-         Ey_do_precip[k] = acc/N;
-         }
+  real acc = 0;
+  for (n in 1:N) {
+    real re = 0;
+    
+    //precipitation -> salinity
+    real sal_k = a_sal 
+    + b_sal_precip * do_precip[k];
+    
+    //salinity + winter_nutrients -> phytoplankton
+    real phyto_k = a_phyto 
+    + b_phyto_sal * sal_k
+    + b_phyto_winternut * winter_nutrients[n]
+    + b_phyto_daylight * daylight[n];
+    
+    //precipitation + phyto -> nutrients 
+    real nut_k = a_nut
+    + b_nut_sst * sst[n]
+    + b_nut_current * current[n]
+    + b_nut_precip * do_precip[k]
+    + b_nut_phyto * phyto_k;
+   
+   //nutrients -> seaweed 
+   real seaweed_k =
+    a_seaweed
+    + b_seaweed_nut * nut_k
+    + b_seaweed_daylight * daylight[n]
+    + b_seaweed_winternut * winter_nutrients[n];
+   
+   //phytoplankton -> cyphonautes 
+   real cyph_k = a_cyph 
+   + b_cyph_phyto * phyto_k
+   + b_cyph_predzoo * pred_zoo[n]
+   + b_cyph_current * current[n];
+   
+   real p_occ = inv_logit(alpha_zi
+   + b_zi_seaweed * seaweed_k
+   + b_zi_phyto * phyto_k
+   + b_zi_cyph * cyph_k + 
+   re);
+   
+   real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf 
+   + b_bf_seaweed * seaweed_k
+   + b_bf_phyto * phyto_k
+   + b_bf_cyph * cyph_k
+   + re)));
+   
+   acc += p_occ * mu * farm_weight[n];
+  }
+  Ey_do_precip[k] = acc / sum(farm_weight);
+  }
          
          //Predatory zooplankton
          
          { real acc = 0;
          for (n in 1:N) {
-           real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
+           real re = 0;
            
            //predatory zooplankton -> cyphonautes
            real cyph_k = a_cyph
@@ -786,107 +833,101 @@ model {
           + b_bf_cyph * cyph_k
           + re)));
           
-          acc += p_occ * mu;
+          acc += p_occ * mu * farm_weight[n];
           
          }
-         Ey_do_predzoo[k] = acc/N;
+         Ey_do_predzoo[k] = acc / sum(farm_weight);
          }
          
          //sst
          //lots of paths
          {
-           real acc = 0;
-           for (n in 1:N) {
-             real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
-             
-             //sst -> nutrients
-             real nut_k = a_nut
-             + b_nut_sst * do_sst[k]
-             + b_nut_current * current[n]
-             + b_nut_precip * precip[n];
-             
-             //sst + nutrients -> seaweed
-             real seaweed_k = a_seaweed
-             + b_seaweed_sst * do_sst[k]
-             + b_seaweed_nut * nut_k
-             + b_seaweed_daylight * daylight[n];
-             
-             //nutreitns -> phyto
-             real phyto_k = a_phyto 
-             + b_phyto_sal * salinity[n] //no effect from sst
-             + b_phyto_nut *  nut_k
-             + b_phyto_daylight * daylight[n];
-             
-             //phyto -> cyphonautes
-             real cyph_k = a_cyph
-             + b_cyph_phyto * phyto_k
-             + b_cyph_predzoo * pred_zoo[n]
-             + b_cyph_current * current[n];
-             
-             real p_occ = inv_logit(alpha_zi
-             + b_zi_seaweed * seaweed_k
-             + b_zi_phyto * phyto_k
-             + b_zi_cyph * cyph_k
-             + re);
-             
-             real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf
-             + b_bf_seaweed * seaweed_k 
-             + b_bf_phyto * phyto_k
-             + b_bf_cyph * cyph_k
-             + re)));
-             
-             acc += p_occ * mu;
-             }
-             Ey_do_sst[k] = acc/N;
-         }
+  real acc = 0;
+  for (n in 1:N) {
+    real re = 0;
+    
+    //winter nutrients -> phyto (unaffected by sst)
+    real phyto_k = a_phyto 
+    + b_phyto_sal * salinity[n]
+    + b_phyto_winternut * winter_nutrients[n]
+    + b_phyto_daylight * daylight[n];
+    
+    //sst + phyto -> nutrients
+    real nut_k = a_nut
+    + b_nut_sst * do_sst[k]
+    + b_nut_current * current[n]
+    + b_nut_precip * precip[n]
+    + b_nut_phyto * phyto_k;
+    
+    //sst + nutrients -> seaweed
+    real seaweed_k =
+    a_seaweed
+    + b_seaweed_nut * nut_k
+    + b_seaweed_daylight * daylight[n]
+    + b_seaweed_winternut * winter_nutrients[n];
+    
+    //phyto -> cyphonautes
+    real cyph_k = a_cyph
+    + b_cyph_phyto * phyto_k
+    + b_cyph_predzoo * pred_zoo[n]
+    + b_cyph_current * current[n];
+    
+    real p_occ = inv_logit(alpha_zi
+    + b_zi_seaweed * seaweed_k
+    + b_zi_phyto * phyto_k
+    + b_zi_cyph * cyph_k
+    + re);
+    
+    real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf
+    + b_bf_seaweed * seaweed_k 
+    + b_bf_phyto * phyto_k
+    + b_bf_cyph * cyph_k
+    + re)));
+    
+    acc += p_occ * mu * farm_weight[n];
+    }
+    Ey_do_sst[k] = acc / sum(farm_weight);
+}
          
          //Nutrients
          
-         {
-           real acc = 0;
-           for (n in 1:N) {
-             real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
-             
-             //nutrients -> seaweed
-             real seaweed_k = a_seaweed
-             + b_seaweed_sst * sst[n]
-             + b_seaweed_nut * do_nutrients[k]
-             + b_seaweed_daylight * daylight[n];
-             
-             //nutrients -> phytoplankton
-             real phyto_k =  a_phyto
-             + b_phyto_sal * salinity[n]
-             + b_phyto_nut * do_nutrients[k]
-             + b_phyto_daylight * daylight[n];
-             
-             //phytoplankton -> cyphonautes
-             real cyph_k = a_cyph 
-             + b_cyph_phyto * phyto_k
-             + b_cyph_predzoo * pred_zoo[n]
-             + b_cyph_current * current[n];
-             
-             real p_occ = inv_logit(alpha_zi 
-             + b_zi_seaweed * seaweed_k
-             + b_zi_phyto * phyto_k
-             + b_zi_cyph * cyph_k
-             + re);
-             
-             real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf
-             + b_bf_seaweed * seaweed_k
-             + b_bf_phyto * phyto_k
-             + b_bf_cyph * cyph_k
-             + re)));
-             
-             acc += p_occ * mu;
-           }
-           Ey_do_nutrients[k] = acc/N;
-         }
+        {
+  real acc = 0;
+  for (n in 1:N) {
+    real re = 0;
+    
+    //nutrients -> seaweed (only remaining downstream path)
+    real seaweed_k =
+    a_seaweed
+    + b_seaweed_nut * do_nutrients[k]
+    + b_seaweed_daylight * daylight[n]
+    + b_seaweed_winternut * winter_nutrients[n];
+    
+    //phyto stays observed — nutrients no longer affects it
+    //cyphonautes stays observed — depends on phyto, not nutrients
+    
+    real p_occ = inv_logit(alpha_zi 
+    + b_zi_seaweed * seaweed_k
+    + b_zi_phyto * phyto[n]
+    + b_zi_cyph * cyphonautes[n]
+    + re);
+    
+    real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf
+    + b_bf_seaweed * seaweed_k
+    + b_bf_phyto * phyto[n]
+    + b_bf_cyph * cyphonautes[n]
+    + re)));
+    
+    acc += p_occ * mu * farm_weight[n];
+  }
+  Ey_do_nutrients[k] = acc / sum(farm_weight);
+}
          
          //Seaweed growth
          {
            real acc = 0;
            for (n in 1:N) {
-             real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
+             real re = 0;
             //no downstream nodes connecting it to biofouling
             //# awesome
             
@@ -902,84 +943,112 @@ model {
             + b_bf_cyph * cyphonautes[n]
             + re)));
             
-            acc += p_occ * mu;
+            acc += p_occ * mu * farm_weight[n];
             }
-            Ey_do_seaweed[k] = acc/N;
+            Ey_do_seaweed[k] = acc / sum(farm_weight);
          }
 
-         //Phytoplankton
-         //only one downstream variable
-         { 
-           real acc = 0;
-           for(n in 1:N) {
-             real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
-             
-             //phytoplankton -> cyphonautes
-             real cyph_k = a_cyph 
-             + b_cyph_phyto * do_phyto[k]
-             + b_cyph_predzoo * pred_zoo[n]
-             + b_cyph_current * current[n];
-             
-             real p_occ = inv_logit(alpha_zi
-             + b_zi_seaweed * seaweed[n]
-             + b_zi_phyto * do_phyto[k]
-             + b_zi_cyph * cyph_k
-             + re);
-             
-             real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf
-             + b_bf_seaweed * seaweed[n]
-             + b_bf_phyto * do_phyto[k]
-             + b_bf_cyph * cyph_k
-             + re)));
-             
-             acc += p_occ * mu;
-           }
-           Ey_do_phyto[k] = acc/N;
-         }
+  //Phytoplankton
+  //only one downstream variable
+        { 
+  real acc = 0;
+  for(n in 1:N) {
+    real re = 0;
+    
+    //phytoplankton -> cyphonautes
+    real cyph_k = a_cyph 
+    + b_cyph_phyto * do_phyto[k]
+    + b_cyph_predzoo * pred_zoo[n]
+    + b_cyph_current * current[n];
+    
+    //phytoplankton -> nutrients 
+    real nut_k = a_nut
+    + b_nut_sst * sst[n]
+    + b_nut_current * current[n]
+    + b_nut_precip * precip[n]
+    + b_nut_phyto * do_phyto[k];
+    
+    //nutrients -> seaweed 
+    real seaweed_k =
+    a_seaweed
+    + b_seaweed_nut * nut_k
+    + b_seaweed_daylight * daylight[n]
+    + b_seaweed_winternut * winter_nutrients[n];
+    
+    real p_occ = inv_logit(alpha_zi
+    + b_zi_seaweed * seaweed_k
+    + b_zi_phyto * do_phyto[k]
+    + b_zi_cyph * cyph_k
+    + re);
+    
+    real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf
+    + b_bf_seaweed * seaweed_k
+    + b_bf_phyto * do_phyto[k]
+    + b_bf_cyph * cyph_k
+    + re)));
+    
+    acc += p_occ * mu * farm_weight[n];
+  }
+  Ey_do_phyto[k] = acc / sum(farm_weight);
+}
          
-         // salinity
-         { 
-           real acc = 0;
-           for (n in 1:N) {
-             real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
-             
-             //salinity -> phytoplankton
-             real phyto_k = a_phyto
-             + b_phyto_sal * do_salinity[k]
-             + b_phyto_nut * nutrients[n]
-             + b_phyto_daylight * daylight[n];
-             
-             //phyto -> cyphonautes
-             real cyph_k = a_cyph
-             + b_cyph_phyto * phyto_k
-             + b_cyph_predzoo * pred_zoo[n]
-             + b_cyph_current * current[n];
-             
-             //biofoulin
-             real p_occ = inv_logit(alpha_zi
-             + b_zi_seaweed * seaweed[n]
-             + b_zi_phyto * phyto_k
-             + b_zi_cyph * cyph_k
-             + re);
-             
-             real mu = fmax(eps, fmin(1- eps, inv_logit(alpha_bf
-             + b_bf_seaweed * seaweed[n] 
-             + b_bf_phyto * phyto_k
-             + b_bf_cyph * cyph_k
-             + re)));
-             
-             acc += p_occ * mu;
-             }
-             Ey_do_salinity[k] = acc/N;
-             
-           }
+  // salinity
+        { 
+  real acc = 0;
+  for (n in 1:N) {
+    real re = 0;
+    
+    //salinity -> phytoplankton
+    real phyto_k = a_phyto
+    + b_phyto_sal * do_salinity[k]
+    + b_phyto_winternut * winter_nutrients[n]
+    + b_phyto_daylight * daylight[n];
+    
+    //phyto -> nutrients 
+    real nut_k = a_nut
+    + b_nut_sst * sst[n]
+    + b_nut_current * current[n]
+    + b_nut_precip * precip[n]
+    + b_nut_phyto * phyto_k;
+    
+    //nutrients -> seaweed 
+    real seaweed_k =
+    a_seaweed
+    + b_seaweed_nut * nut_k
+    + b_seaweed_daylight * daylight[n]
+    + b_seaweed_winternut * winter_nutrients[n];
+    
+    //phyto -> cyphonautes
+    real cyph_k = a_cyph
+    + b_cyph_phyto * phyto_k
+    + b_cyph_predzoo * pred_zoo[n]
+    + b_cyph_current * current[n];
+    
+    //biofouling
+    real p_occ = inv_logit(alpha_zi
+    + b_zi_seaweed * seaweed_k
+    + b_zi_phyto * phyto_k
+    + b_zi_cyph * cyph_k
+    + re);
+    
+    real mu = fmax(eps, fmin(1- eps, inv_logit(alpha_bf
+    + b_bf_seaweed * seaweed_k 
+    + b_bf_phyto * phyto_k
+    + b_bf_cyph * cyph_k
+    + re)));
+    
+    acc += p_occ * mu * farm_weight[n];
+    }
+    Ey_do_salinity[k] = acc / sum(farm_weight);
+    
+  }
            
            //Cyphonautes
            //no downstream
            {
              real acc = 0;
              for (n in 1:N) {
-               real re = u_farm[farm_id[n]] + u_replicate[replicate_id[n]];
+               real re = 0;
                real p_occ = inv_logit(alpha_zi
                + b_zi_seaweed * seaweed[n]
                + b_zi_phyto * phyto[n] 
@@ -992,10 +1061,199 @@ model {
                + b_bf_cyph * do_cypho[k] 
                + re)));
                
-               acc += p_occ * mu;
+               acc += p_occ * mu * farm_weight[n];
              }
-             Ey_do_cypho[k] = acc/N;
+             Ey_do_cypho[k] = acc / sum(farm_weight);
            }
+           
+           //Daylight direct
+           //blocking the daylight -> air temp -> sst -> nutrients path
+           // sst and nutrients observed
+           // only direct terms in seaweed and phytoplankton
+           
+           {
+               real acc = 0;
+                for(n in 1:N) {
+                 real re = 0;
+    
+              //seaweed: daylight direct, nutrients observed
+              real seaweed_k =
+    a_seaweed
+    + b_seaweed_nut * nutrients[n]
+    + b_seaweed_daylight * daylight[n]
+    + b_seaweed_winternut * winter_nutrients[n];
+    
+              //phytoplankton: daylight direct, winter_nutrients observed
+              real phyto_k = a_phyto
+              + b_phyto_sal * salinity[n]
+              + b_phyto_winternut * winter_nutrients[n]
+              + b_phyto_daylight * do_daylight[k];
+    
+              real cyph_k = a_cyph
+              +  b_cyph_phyto * phyto_k
+              + b_cyph_predzoo * pred_zoo[n] 
+              + b_cyph_current * current[n];
+    
+             real p_occ = inv_logit(alpha_zi
+            + b_zi_seaweed * seaweed_k
+            + b_zi_phyto * phyto_k
+            + b_zi_cyph * cyph_k
+            + re);
+    
+            real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf
+            + b_bf_seaweed * seaweed_k
+            + b_bf_phyto * phyto_k
+            + b_bf_cyph * cyph_k
+            + re)));
+    
+             acc += p_occ * mu * farm_weight[n];
+               }
+           Ey_do_daylight_direct[k] = acc / sum(farm_weight);
+            }
+           
+           //current
+           // blocking current -> nutrients -> seaweed/phytoplankton path
+           // nutrients observed, current direct through cyphonautes
+           
+           {
+             real acc = 0;
+             for (n in 1:N) {
+               real re = 0;
+               
+               //direct through cyphonautes
+               real cyph_k = a_cyph
+               + b_cyph_phyto * phyto[n]
+               + b_cyph_predzoo * pred_zoo[n]
+               + b_cyph_current * do_current[k];
+               
+               real p_occ = inv_logit(alpha_zi
+               + b_zi_seaweed * seaweed[n]
+               + b_zi_phyto * phyto[n]
+               + b_zi_cyph * cyph_k
+               + re);
+               
+               real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf
+               + b_bf_seaweed * seaweed[n]
+               + b_bf_phyto * phyto[n]
+               + b_bf_cyph * cyph_k
+               + re)));
+               
+               acc += p_occ * mu * farm_weight[n];
+               
+             }
+             
+             Ey_do_current_direct[k] = acc / sum(farm_weight);
+           }
+           
+           //sst 
+           //blocking sst -> nutrients -> seaweed/phytoplankton path 
+           //nutrients observed
+           
+           {
+             real acc = 0;
+             for (n in 1:N) {
+               real re = 0;
+               
+               real seaweed_k =
+    a_seaweed
+    + b_seaweed_nut * nutrients[n]
+    + b_seaweed_daylight * daylight[n]
+    + b_seaweed_winternut * winter_nutrients[n];
+               
+               real cyph_k = a_cyph
+               + b_cyph_phyto * phyto[n]
+               + b_cyph_predzoo * pred_zoo[n]
+               + b_cyph_current * current[n];
+               
+               real p_occ = inv_logit(alpha_zi
+               + b_zi_seaweed * seaweed_k
+               + b_zi_phyto * phyto[n]
+               + b_zi_cyph * cyph_k
+               + re);
+               
+               real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf
+               + b_bf_seaweed * seaweed_k
+               + b_bf_phyto * phyto[n]
+               + b_bf_cyph * cyph_k
+               + re)));
+               
+               acc += p_occ * mu * farm_weight[n];
+             }
+             Ey_do_sst_direct[k] = acc / sum(farm_weight);
+           }
+           
+           {
+            real acc = 0;
+            for (n in 1:N) {
+            real re = 0;
+
+            real p_occ = inv_logit(alpha_zi
+            + b_zi_seaweed * seaweed[n]
+            + b_zi_phyto   * do_phyto[k]
+            + b_zi_cyph    * cyphonautes[n] 
+            + re);
+
+           real mu = fmax(eps, fmin(1 - eps, inv_logit(alpha_bf
+           + b_bf_seaweed * seaweed[n]
+           + b_bf_phyto   * do_phyto[k]
+           + b_bf_cyph    * cyphonautes[n]   
+           + re)));
+
+    acc += p_occ * mu * farm_weight[n];
+  }
+  Ey_do_phyto_direct[k] = acc / sum(farm_weight);
+}
+
+{
+  real acc = 0;
+
+  for (n in 1:N) {
+    real re = 0;
+
+    // winter nutrients intervention → phytoplankton
+    real phyto_k = a_phyto
+      + b_phyto_sal * salinity[n]
+      + b_phyto_winternut * do_winternut[k]
+      + b_phyto_daylight * daylight[n];
+
+    // phyto → nutrients
+    real nut_k = a_nut
+      + b_nut_sst * sst[n]
+      + b_nut_current * current[n]
+      + b_nut_precip * precip[n]
+      + b_nut_phyto * phyto_k;
+
+    // nutrients → seaweed
+    real seaweed_k =
+    a_seaweed
+    + b_seaweed_nut * nut_k
+    + b_seaweed_daylight * daylight[n]
+    + b_seaweed_winternut * do_winternut[k];
+
+    // cyphonautes
+    real cyph_k = a_cyph
+      + b_cyph_phyto * phyto_k
+      + b_cyph_predzoo * pred_zoo[n]
+      + b_cyph_current * current[n];
+
+    real p_occ = inv_logit(alpha_zi
+      + b_zi_seaweed * seaweed_k
+      + b_zi_phyto * phyto_k
+      + b_zi_cyph * cyph_k
+      + re);
+
+    real mu = fmax(eps, fmin(1 - eps,
+      inv_logit(alpha_bf
+        + b_bf_seaweed * seaweed_k
+        + b_bf_phyto * phyto_k
+        + b_bf_cyph * cyph_k
+        + re)));
+
+    acc += p_occ * mu * farm_weight[n];
+  }
+
+  Ey_do_winternut[k] = acc / sum(farm_weight);
+}
          
          
        }// closes intervention section
